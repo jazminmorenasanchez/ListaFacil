@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum PurchaseStatus {
+  SCHEDULED
+  IN_PROGRESS
+}
+
+model Household {
+  id           String        @id @default(cuid())
+  name         String
+  joinCode     String        @unique
+  createdAt    DateTime      @default(now())
+  users        User[]
+  catalogItems CatalogItem[]
+  purchase     Purchase?
+}
+
+model User {
+  id                   String     @id @default(cuid())
+  name                 String
+  email                String     @unique
+  passwordHash         String
+  role                 UserRole
+  householdId          String?
+  createdAt            DateTime   @default(now())
+  household            Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  responsiblePurchases Purchase[] @relation("PurchaseResponsibleUser")
+}
+
+model CatalogItem {
+  id               String            @id @default(cuid())
+  name             String
+  householdId      String
+  createdAt        DateTime          @default(now())
+  household        Household         @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  shoppingListItem ShoppingListItem?
+
+  @@unique([householdId, name])
+}
+
+model ShoppingListItem {
+  id                String      @id @default(cuid())
+  catalogItemId     String      @unique
+  quantity          Int
+  purchasedQuantity Int         @default(0)
+  urgent            Boolean     @default(false)
+  addedAt           DateTime    @default(now())
+  catalogItem       CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+}
+
+model Purchase {
+  id                String         @id @default(cuid())
+  householdId       String         @unique
+  responsibleUserId String
+  scheduledFor      DateTime
+  status            PurchaseStatus
+  createdAt         DateTime       @default(now())
+  startedAt         DateTime?
+  household         Household      @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  responsibleUser   User           @relation("PurchaseResponsibleUser", fields: [responsibleUserId], references: [id], onDelete: Restrict)
+}
