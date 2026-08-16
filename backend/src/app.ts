@@ -8,6 +8,17 @@ import { AppError } from './lib/app-error'
 
 const app = express()
 const port = Number(process.env.PORT) || 3000
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+
+app.use((request, response, next) => {
+  if (request.header('Origin') === frontendUrl) {
+    response.header('Access-Control-Allow-Origin', frontendUrl)
+    response.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+  }
+  if (request.method === 'OPTIONS') { response.sendStatus(204); return }
+  next()
+})
 
 app.use(express.json())
 

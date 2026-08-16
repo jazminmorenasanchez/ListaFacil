@@ -9,6 +9,8 @@ Base del monorepositorio de ListaFácil. En esta etapa contiene un frontend mín
 
 ## Frontend
 
+Copiar `frontend/.env.example` como `frontend/.env` si se necesita cambiar la URL del backend. La variable disponible es `VITE_API_URL` y su valor predeterminado de desarrollo es `http://localhost:3000`.
+
 ```bash
 cd frontend
 npm install
