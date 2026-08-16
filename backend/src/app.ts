@@ -1,6 +1,8 @@
 import express from 'express'
 import { authRouter } from './routes/auth.routes'
 import { householdRouter } from './routes/household.routes'
+import { catalogRouter } from './routes/catalog.routes'
+import { shoppingListRouter } from './routes/shopping-list.routes'
 import { AppError } from './lib/app-error'
 
 const app = express()
@@ -14,6 +16,8 @@ app.get('/health', (_request, response) => {
 
 app.use('/auth', authRouter)
 app.use('/households', householdRouter)
+app.use('/catalog', catalogRouter)
+app.use('/shopping-list', shoppingListRouter)
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   if (error instanceof AppError) {
