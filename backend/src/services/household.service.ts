@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto'
+import { DEFAULT_CATALOG_ITEMS } from '../data/default-catalog'
 import { Prisma, PurchaseStatus, UserRole } from '../generated/prisma/client'
 import { AppError } from '../lib/app-error'
 import { prisma } from '../lib/prisma'
@@ -88,6 +89,13 @@ export async function createHousehold(userId: string, requestedName: string) {
         if (assignment.count !== 1) {
           throw new AppError(409, 'El usuario ya pertenece a un hogar')
         }
+
+        await transaction.catalogItem.createMany({
+          data: DEFAULT_CATALOG_ITEMS.map((catalogItemName) => ({
+            householdId: household.id,
+            name: catalogItemName,
+          })),
+        })
 
         return { ...household, role: UserRole.ADMIN, memberCount: 1 }
       })
@@ -221,14 +229,12 @@ export async function leaveHousehold(userId: string): Promise<void> {
         data: { householdId: null, role: UserRole.MEMBER },
       })
 
-      try {
-        await transaction.household.delete({ where: { id: user.householdId } })
-      } catch (error) {
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2003') {
-          throw new AppError(409, 'El hogar tiene datos asociados y no puede eliminarse todavía')
-        }
-        throw error
-      }
+      await transaction.shoppingListItem.deleteMany({
+        where: { catalogItem: { householdId: user.householdId } },
+      })
+      await transaction.catalogItem.deleteMany({ where: { householdId: user.householdId } })
+      await transaction.purchase.deleteMany({ where: { householdId: user.householdId } })
+      await transaction.household.delete({ where: { id: user.householdId } })
       return
     }
 
