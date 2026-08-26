@@ -18,3 +18,13 @@ No tomé las respuestas de la IA como resultado final sin verificarlas. Fui ejec
 La IA también me ayudó a comprender el propósito de cada paso para poder realizar el trabajo y explicarlo, en lugar de limitarme a copiar y ejecutar comandos.
 
 Tambien utilicé IA para ayudarme a redactar todo lo relacionado con la documentación, siempre primero lo escribo yo con mis palabras y luego se lo envio para obtener una versión limpia.
+
+## TP2 – Elección de la aplicación y repositorio del semestre
+
+Para los trabajos prácticos a partir del TP2 se eligió **ListaFacil** como aplicación del semestre.
+
+ListaFacil es una aplicación desarrollada previamente y cuenta con un historial propio de commits que refleja su evolución, incluyendo la configuración inicial, autenticación, gestión de hogares y miembros, catálogo, lista de compras y frontend.
+
+Se decidió utilizar el repositorio propio de ListaFacil como repositorio principal del semestre, en lugar de incorporar la aplicación al repositorio utilizado originalmente para el TP1. De esta manera se conserva el historial real de desarrollo de la aplicación y se permite continuar evolucionándola incluso después de finalizar la materia.
+
+Como parte de esta decisión, se migraron al repositorio de ListaFacil los archivos `decisiones.md` y `evidencias.md` provenientes del TP1 y se recrearán las protecciones de la rama `main`.
