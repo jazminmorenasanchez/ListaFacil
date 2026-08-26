@@ -8,7 +8,7 @@ GitHub rechaza el push directo porque la rama `main` está protegida y la regla 
 
 ## 2. Conflicto en el PR de la rama B
 
-![Conflicto en PR](img/conflicto-pr.jpeg)
+![Conflicto en PR](img/pr-conflicto.jpeg)
 
 GitHub detecta un conflicto entre las ramas A y B porque ambas modificaron la misma línea del README.
 
