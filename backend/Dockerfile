@@ -3,6 +3,10 @@ FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Primero copiamos los archivos de dependencias para aprovechar la caché
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -27,13 +31,19 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Instalamos solamente dependencias necesarias en producción
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# El CLI de Prisma es necesario para aplicar migraciones al iniciar.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# Copiamos el código ya compilado desde la etapa build
+# Copiamos el código compilado, la configuración y las migraciones.
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 
 EXPOSE 3000
 
-CMD ["node", "dist/app.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/app.js"]
