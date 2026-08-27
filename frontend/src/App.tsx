@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiRequest } from './services/api'
+import { apiRequest, ApiError, UNAUTHORIZED_EVENT } from './services/api'
 import type { Household, User } from './types'
 import { AuthPage } from './pages/AuthPage'
 import { NoHouseholdPage } from './pages/NoHouseholdPage'
@@ -14,8 +14,9 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '')
   const [user, setUser] = useState<User | null>(null), [household, setHousehold] = useState<Household | null>(null)
   const [loading, setLoading] = useState(Boolean(token)), [view, setView] = useState<View>('list')
-  function logout() { localStorage.removeItem(TOKEN_KEY); setToken(''); setUser(null); setHousehold(null) }
-  async function refresh(currentToken = token) { try { const me = await apiRequest<{ user: User }>('/auth/me', {}, currentToken); const current = await apiRequest<{ household: Household | null }>('/households/current', {}, currentToken); setUser(me.user); setHousehold(current.household) } catch { logout() } finally { setLoading(false) } }
+  function logout() { localStorage.removeItem(TOKEN_KEY); setToken(''); setUser(null); setHousehold(null); setView('list'); setLoading(false) }
+  async function refresh(currentToken = token) { try { const me = await apiRequest<{ user: User }>('/auth/me', {}, currentToken); setUser(me.user); const current = await apiRequest<{ household: Household | null }>('/households/current', {}, currentToken); setHousehold(current.household) } catch (caught) { if (caught instanceof ApiError && caught.status === 401) logout() } finally { setLoading(false) } }
+  useEffect(() => { window.addEventListener(UNAUTHORIZED_EVENT, logout); return () => window.removeEventListener(UNAUTHORIZED_EVENT, logout) }, [])
   useEffect(() => { if (token) void refresh(token) }, [])
   function authenticated(nextToken: string, nextUser: User) { localStorage.setItem(TOKEN_KEY, nextToken); setToken(nextToken); setUser(nextUser); setLoading(true); void refresh(nextToken) }
   if (loading) return <main><p>Cargando...</p></main>

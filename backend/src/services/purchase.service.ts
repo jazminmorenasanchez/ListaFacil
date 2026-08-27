@@ -8,6 +8,7 @@ const responsibleSelect = { id: true, name: true, email: true } satisfies Prisma
 function parseDate(value: string): Date {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) throw new AppError(400, 'La fecha programada no es válida')
+  if (date.getTime() <= Date.now()) throw new AppError(400, 'La fecha programada debe ser futura')
   return date
 }
 

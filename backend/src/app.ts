@@ -26,11 +26,11 @@ app.get('/health', (_request, response) => {
   response.json({ status: 'ok' })
 })
 
-app.use('/auth', authRouter)
-app.use('/households', householdRouter)
-app.use('/catalog', catalogRouter)
-app.use('/shopping-list', shoppingListRouter)
-app.use('/purchases', purchaseRouter)
+app.use('/api/auth', authRouter)
+app.use('/api/households', householdRouter)
+app.use('/api/catalog', catalogRouter)
+app.use('/api/shopping-list', shoppingListRouter)
+app.use('/api/purchases', purchaseRouter)
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   if (error instanceof AppError) {
