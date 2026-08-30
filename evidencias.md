@@ -65,7 +65,7 @@ La etapa de compilación contiene las herramientas y dependencias necesarias par
 
 Esto refleja el objetivo del multi-stage build: separar construcción y ejecución, evitando trasladar a la imagen final herramientas de desarrollo innecesarias.
 
-![comparacion de imagenes](img/tamaños-imagen.png)
+![comparacion de imagenes](img/tamanos-imagen.png)
 
 ### Imágenes publicadas en el registry
 
