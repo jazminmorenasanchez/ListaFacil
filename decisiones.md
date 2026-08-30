@@ -1,4 +1,14 @@
-## TP2 - Git
+# Decisiones
+
+## Índice
+
+- [TP1 - Git colaborativo](#tp1---git-colaborativo)
+- [TP2 - Contenedores: la app del semestre](#tp2--contenedores-la-app-del-semestre)
+- [TP3 - Planificación y trazabilidad](#tp3--planificación-y-trazabilidad)
+- [TP4 - CI: Pipelines as Code](#tp4---ci-pipelines-as-code)
+
+
+## TP1 - Git colaborativo
 
 ### Por qué Git no pudo resolver el conflicto solo — y qué habría tenido que pasar para que nunca apareciera.
 Git no pudo resolver el conflicto automáticamente porque se había modificado exactamente la misma línea desde dos ramas distintas. Al mergear la primera rama a main y luego intentar mergear la segunda, Git encontró dos versiones diferentes para una misma línea y no pudo determinar cuál debía conservar.
@@ -21,7 +31,7 @@ La IA también me ayudó a comprender el propósito de cada paso para poder real
 
 Tambien utilicé IA para ayudarme a redactar todo lo relacionado con la documentación, siempre primero lo escribo yo con mis palabras y luego se lo envio para obtener una versión limpia.
 
-## TP2 — Contenedores
+## TP2 — Contenedores: la app del semestre
 
 ### Aplicación elegida
 
@@ -102,3 +112,34 @@ Por eso decidimos mover `prisma` de `devDependencies` a `dependencies`. De esta 
 en la etapa final. Así, Prisma CLI sigue estando disponible para ejecutar las migraciones, pero el resto de las herramientas utilizadas únicamente durante el desarrollo y la compilación quedan fuera de la imagen final.
 
 La solución final mantiene entonces las dos cosas que necesitábamos: **las migraciones se aplican automáticamente al arrancar el backend y la imagen final no necesita incluir todas las dependencias de desarrollo**.
+
+## TP3 — Planificación y trazabilidad
+
+### Duración del sprint
+
+Elegí una duración de 2 semanas porque es un período suficientemente corto para revisar el avance y realizar ajustes con frecuencia, pero a la vez brinda tiempo suficiente para completar las tareas planificadas sin generar una sobrecarga de planificación.
+- ¿Por qué no 1 semana? Podría ser demasiado corto: estaría planificando y revisando muy seguido en relación con el poco trabajo disponible.
+- ¿Por qué no 1 mes? Es demasiado largo para este contexto: si algo se desvía, tardaría mucho en detectarlo y reajustar la planificación.
+
+Por eso 2 semanas es un punto intermedio razonable: trabajás, evaluás qué se completó y cada dos semanas tenés oportunidad de reorganizar lo siguiente.
+
+### Limite WIP (Work In Progress)
+
+Elegí un límite de 2 elementos en In Progress, siguiendo la regla de cantidad de personas del equipo + 1. Como trabajo de forma individual, el límite es 1 + 1 = 2. El elemento adicional funciona como buffer si una tarea queda esperando una revisión o respuesta, permitiéndome avanzar con otra sin acumular demasiado trabajo en paralelo.
+
+### Diagnóstico de la historia mal escrita
+
+#### “Como desarrollador quiero crear la tabla usuarios para guardar los datos.”
+¿Por qué está mal escrita? Está formulada como una solución o tarea técnica (“crear la tabla usuarios”) en lugar de expresar una necesidad que aporte valor al usuario.
+Cómo la reescribiría: 
+#### “Como usuario quiero registrarme en la aplicación para poder acceder a mis datos y funcionalidades.”
+
+### Problemas encontrados
+
+Al configurar el Project tuve dificultad para encontrar la opción para crear el campo Sprint, ya que inicialmente confundí el botón global + de GitHub con el botón para agregar campos de la tabla. Lo resolví mandandole a la IA una captura de pantalla y que me indicara donde esta la opción de agregar un nuevo campo dentro de la vista Table y creando allí el campo de tipo Iteration.
+
+### Declaracion de uso de IA
+
+Utilicé ChatGPT como asistencia para interpretar la guía del TP, comprender los conceptos y acompañar paso a paso la configuración del Project, la jerarquía de issues, el sprint, el límite WIP y la trazabilidad con el Pull Request. Verifiqué las indicaciones contrastándolas con la guía de la cátedra y comprobando en GitHub que cada configuración y automatización funcionara como se esperaba.
+
+## TP4 - CI: Pipelines as Code
