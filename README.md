@@ -11,6 +11,8 @@ La aplicación está compuesta por:
 - **Servidor web del frontend:** nginx.
 - **Contenedores:** Docker y Docker Compose.
 
+[![CI](https://github.com/jazminmorenasanchez/ListaFacil/actions/workflows/ci.yml/badge.svg)](https://github.com/jazminmorenasanchez/ListaFacil/actions/workflows/ci.yml)
+
 ## Índice
 
 - [Requisitos](#requisitos)
