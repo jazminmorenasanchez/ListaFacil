@@ -63,6 +63,94 @@ Se decidió utilizar el repositorio propio de ListaFacil como repositorio princi
 
 Como parte de esta decisión, se migraron al repositorio de ListaFacil los archivos `decisiones.md` y `evidencias.md` provenientes del TP1 y se recrearon las protecciones de la rama `main`, adaptando este repositorio al flujo de trabajo requerido en el TP1.
 
+### Migración y reconstrucción de la trazabilidad del TP1
+
+#### Contexto
+
+El TP1 se realizó inicialmente en un repositorio independiente, siguiendo la consigna
+original de crear un repositorio específico para el trabajo práctico.
+
+Posteriormente, al comenzar el desarrollo de ListaFacil como aplicación integradora del
+semestre, se tomó la decisión de centralizar en un único repositorio el trabajo de los
+TP posteriores y la documentación asociada.
+
+Por este motivo se realizó una migración de la documentación del TP1 a `ListaFacil`.
+
+#### Problema detectado
+
+La migración de archivos no implica la migración automática de los objetos y referencias
+propias del repositorio Git anterior.
+
+En particular, elementos como:
+
+- tags;
+- releases;
+- Pull Requests;
+- configuración de protección de ramas;
+- evidencias de conflictos;
+
+pertenecen al repositorio donde fueron creados y no se trasladan simplemente copiando
+los archivos del proyecto.
+
+Durante la preparación de la defensa se detectó que `ListaFacil` contenía la documentación
+migrada del TP1, pero no toda la trazabilidad Git que se quería conservar dentro del
+repositorio definitivo.
+
+#### Decisión
+
+En lugar de modificar o falsear el historial existente, se decidió reconstruir únicamente
+las prácticas necesarias dentro de `ListaFacil`.
+
+Se volvió a verificar:
+
+- protección de `main`;
+- trabajo mediante Pull Requests;
+- generación y resolución deliberada de un conflicto;
+- creación del tag y release correspondientes al TP1.
+
+La intención no fue simular que estas operaciones ocurrieron en una fecha diferente,
+sino garantizar que el repositorio definitivo contuviera evidencia verificable de los
+conceptos evaluados en el TP1.
+
+#### Decisión sobre el tag `v1.0.0`
+
+Al momento de completar esta regularización ya existía el tag `v4.0.0`.
+
+Crear `v1.0.0` sobre el estado actual de `main` hubiera sido técnicamente válido para Git,
+pero conceptualmente incorrecto, porque habría hecho que una versión `1.0.0` apuntara a
+un estado posterior a la versión `4.0.0`.
+
+Por ese motivo se decidió crear el tag de manera retrospectiva sobre el commit histórico:
+
+`8eaa96d3061136df8b92a1bed9d031616f226037`
+
+correspondiente al merge de la migración del TP1 al repositorio del semestre.
+
+De esta manera:
+
+- `v1.0.0` referencia un punto anterior del historial;
+- `v4.0.0` continúa representando una versión posterior;
+- no se mueve ni modifica ningún tag existente;
+- no se reescribe el historial;
+- la numeración conserva su significado temporal dentro del proyecto.
+
+La fecha de creación del objeto tag es posterior a la fecha del commit señalado, lo cual
+es válido en Git: un tag puede crearse posteriormente apuntando a cualquier commit
+existente del historial.
+
+#### Resultado
+
+El repositorio mantiene ahora una trazabilidad coherente:
+
+`v1.0.0` → incorporación histórica del TP1 al repositorio del semestre
+
+...
+
+`v4.0.0` → cierre del TP4
+
+La regularización se realizó preservando el historial existente en lugar de modificarlo
+para aparentar una cronología que no ocurrió.
+
 ### Decisiones de contenerización
 
 Para contenerizar ListaFácil se decidió separar la aplicación en tres servicios: **frontend, backend y base de datos**, cada uno ejecutándose en su propio contenedor y coordinados mediante Docker Compose.
