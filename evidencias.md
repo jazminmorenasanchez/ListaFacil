@@ -1,30 +1,35 @@
-# Evidencias — TP1
+# Evidencias
+### indice
+- [Evidencias - TP1](#evidencias--tp1)
+- [Evidencias - TP2](#evidencias---tp2)
 
-## 1. Push directo a main rechazado
+## Evidencias — TP1
+
+### 1. Push directo a main rechazado
 
 ![Push rechazado](img/push-rechazado.jpeg)
 
 GitHub rechaza el push directo porque la rama `main` está protegida y la regla también alcanza al dueño del repositorio.
 
-## 2. Conflicto en el PR de la rama B
+### 2. Conflicto en el PR de la rama B
 
 ![Conflicto en PR](img/pr-conflicto.jpeg)
 
 GitHub detecta un conflicto entre las ramas A y B porque ambas modificaron la misma línea del README.
 
-## 3. Marcadores del conflicto
+### 3. Marcadores del conflicto
 
 ![Marcadores del conflicto](img/conflicto-marcadores.jpeg)
 
-GitHub muestra los marcadores del conflicto con las dos versiones de la línea. elegimos luego solo una versión.
+GitHub muestra los marcadores del conflicto con las dos versiones de la línea. Luego se eligió una de las versiones para resolver el conflicto.
 
-## 4. Release v1.0.0 publicada
+### 4. Release v1.0.0 publicada
 
 ![Release v1.0.0](img/release.jpeg)
 
 Se muestra la release `v1.0.0` publicada a partir del tag creado para la primera versión del TP.
 
-## Evidencias TP2
+## Evidencias - TP2
 
 ### Docker Compose y funcionamiento del sistema
 
@@ -35,27 +40,27 @@ Finalmente, se comprobó el funcionamiento del backend mediante el endpoint `/he
 
 ![docker compose funcionando](img/docker-compose-funcionando.png)
 
-Con esto logramos evidenciar que después de eliminar y recrear los contenedores, se intenta registrar nuevamente un usuario que ya existía y la aplicación indica que el email continua registrado, demostrando que los datos de PostgreSQL se conservaron en el volumen `db_data`.
-
-![el usuario sigue registrado](img/usuario-registrado.png)
-
 ### Persistencia de los datos
 
-Continuando con la evidencia anterior, para comprobar la persistencia de PostgreSQL, primero se ejecutó `docker compose down` y luego `docker compose up -d`. Al volver a levantar los contenedores, el usuario creado anteriormente continuaba registrado, demostrando que los datos se conservaron en el volumen `db_data`.
+Para comprobar la persistencia de PostgreSQL, primero se creó un usuario en la aplicación. Luego se ejecutó `docker compose down` y posteriormente `docker compose up -d`.
+
+Al volver a levantar los contenedores, se intentó registrar nuevamente el mismo usuario y la aplicación indicó que el email ya se encontraba registrado. Esto demuestra que los datos se conservaron en el volumen `db_data` aunque los contenedores fueran eliminados y recreados.
+
+![el usuario sigue registrado](img/usuario-registrado.png)
 
 Luego se ejecutó:
 
 `docker compose down -v`
 
-En este caso Docker eliminó también el volumen `listafacil_db_data`. Al volver a levantar la aplicación con `docker compose up -d`, Docker creó un nuevo volumen y el usuario que existía anteriormente dejó de estar registrado, como se observa al intentar iniciar sesión con las mismas credenciales.
+En este caso, Docker eliminó también el volumen `listafacil_db_data`. Al volver a levantar la aplicación con `docker compose up -d`, Docker creó un nuevo volumen y los datos almacenados anteriormente dejaron de existir.
 
-Esto demuestra que los datos sobreviven a la eliminación de los contenedores mediante `down`, pero se eliminan cuando también se elimina el volumen mediante `down -v`.
+Al intentar iniciar sesión con el mismo usuario registrado anteriormente, ya no fue posible ingresar porque sus datos habían sido eliminados junto con el volumen.
 
 ![docker compose sin volumen](img/docker-compose-sin-volumen.png)
 
-Aca vemos como al intentar entrar con el mismo usario que ya habiamos registrado no logramos ingresar.
-
 ![el mismo usuario no registrado](img/usuario-no-registrado.png)
+
+Esto demuestra que los datos sobreviven a la eliminación de los contenedores mediante `docker compose down`, pero se eliminan cuando también se elimina el volumen mediante `docker compose down -v`.
 
 ### Comparación de tamaños de la imagen
 
