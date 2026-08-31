@@ -45,4 +45,3 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 app.listen(port, () => {
   console.log(`Backend escuchando en http://localhost:${port}`)
 })
-import x from './no-existe';
