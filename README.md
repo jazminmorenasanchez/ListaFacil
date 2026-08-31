@@ -1,4 +1,4 @@
-# ListaFácil
+# ListaFácil - version A
 
 ListaFácil es una aplicación web para gestionar de forma colaborativa las compras de un hogar.
 
