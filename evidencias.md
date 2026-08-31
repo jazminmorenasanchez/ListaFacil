@@ -7,25 +7,25 @@
 
 ### 1. Push directo a main rechazado
 
-![Push rechazado](img/push-rechazado.jpeg)
+![Push rechazado](img/push-rechazado.png)
 
 GitHub rechaza el push directo porque la rama `main` está protegida y la regla también alcanza al dueño del repositorio.
 
 ### 2. Conflicto en el PR de la rama B
 
-![Conflicto en PR](img/pr-conflicto.jpeg)
+![Conflicto en PR](img/pr-conflicto.png)
 
 GitHub detecta un conflicto entre las ramas A y B porque ambas modificaron la misma línea del README.
 
 ### 3. Marcadores del conflicto
 
-![Marcadores del conflicto](img/conflicto-marcadores.jpeg)
+![Marcadores del conflicto](img/conflicto-marcadores.png)
 
 GitHub muestra los marcadores del conflicto con las dos versiones de la línea. Luego se eligió una de las versiones para resolver el conflicto.
 
 ### 4. Release v1.0.0 publicada
 
-![Release v1.0.0](img/release.jpeg)
+![Release v1.0.0](img/release.png)
 
 Se muestra la release `v1.0.0` publicada a partir del tag creado para la primera versión del TP.
 
