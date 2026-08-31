@@ -143,3 +143,68 @@ Al configurar el Project tuve dificultad para encontrar la opción para crear el
 Utilicé ChatGPT como asistencia para interpretar la guía del TP, comprender los conceptos y acompañar paso a paso la configuración del Project, la jerarquía de issues, el sprint, el límite WIP y la trazabilidad con el Pull Request. Verifiqué las indicaciones contrastándolas con la guía de la cátedra y comprobando en GitHub que cada configuración y automatización funcionara como se esperaba.
 
 ## TP4 - CI: Pipelines as Code
+
+### Estructura del pipeline
+
+El pipeline de integración continua se definió en `.github/workflows/ci.yml` utilizando GitHub Actions.
+
+Se eligieron dos jobs independientes:
+
+- `build-backend`
+- `build-frontend`
+
+La aplicación está separada en backend y frontend, y cada parte posee su propio Dockerfile. Por este motivo, cada imagen se construye en un job distinto.
+
+Los jobs no dependen entre sí, por lo que pueden ejecutarse en paralelo. De esta manera, si uno de los builds falla, el otro puede continuar y mostrar de forma independiente qué parte de la aplicación presenta el problema.
+
+El workflow se ejecuta en los Pull Requests dirigidos a `main` y también ante pushes a `main`. Los Pull Requests permiten verificar los cambios antes del merge, mientras que las ejecuciones sobre `main` mantienen actualizado el estado del pipeline y el badge del README.
+
+### Cache de capas
+
+Para acelerar construcciones posteriores se configuró cache de capas de Docker mediante GitHub Actions y Docker Buildx.
+
+Cada job utiliza su propio scope:
+
+- `scope=backend`
+- `scope=frontend`
+
+Esto evita que el cache de una imagen sobrescriba al de la otra.
+
+El pipeline intenta recuperar las capas almacenadas con `cache-from` y, al terminar, guarda las capas mediante `cache-to` con `mode=max`.
+
+Se reutilizan las capas cuyo contenido y dependencias no cambiaron. Por ejemplo, si no cambian los archivos de dependencias, pueden reutilizarse capas como la instalación realizada por `npm ci`. Cuando cambia una instrucción o alguno de los archivos de los que depende, esa capa y las posteriores deben reconstruirse.
+
+Se verificó el funcionamiento del cache ejecutando dos veces el pipeline sobre el mismo Pull Request. En la segunda corrida se observaron capas marcadas como `CACHED` tanto en backend como en frontend.
+
+El cache es solamente una optimización. Si desaparece, el pipeline debe continuar funcionando y reconstruir las imágenes desde cero; únicamente tardaría más.
+
+### Uso de los Dockerfiles del proyecto
+
+El pipeline construye el backend y el frontend utilizando los Dockerfiles creados previamente para la aplicación.
+
+Se decidió no repetir en GitHub Actions comandos específicos como `npm ci`, `npm run build` o la generación de Prisma Client.
+
+De esta manera existe una única definición de cómo se construye cada componente: su Dockerfile.
+
+Esto evita mantener dos procesos de build diferentes que podrían divergir con el tiempo. El mismo proceso que se utiliza para construir las imágenes de la aplicación es el que verifica el pipeline de integración continua.
+
+### Pipeline como requisito de merge
+
+Se configuraron `build-backend` y `build-frontend` como status checks obligatorios para realizar merge sobre `main`.
+
+También se activó la opción que exige que la rama se encuentre actualizada con `main` antes del merge.
+
+Se comprobó el funcionamiento del gate introduciendo intencionalmente un import inexistente en el backend. El build de TypeScript falló durante la construcción de la imagen y el check `build-backend` quedó en rojo, bloqueando el botón de merge.
+
+Luego se eliminó el error, se realizó un nuevo push sobre el mismo Pull Request y el pipeline volvió a ejecutarse automáticamente. Cuando ambos jobs quedaron verdes, el Pull Request volvió a quedar habilitado para merge.
+
+También se comprobó el requisito de mantener la rama actualizada mediante un segundo Pull Request. Luego de modificar `main`, GitHub indicó que la rama estaba desactualizada y exigió utilizar `Update branch` antes de permitir el merge.
+
+
+### Uso de inteligencia artificial
+
+Se utilizó inteligencia artificial como herramienta de apoyo durante el desarrollo del trabajo práctico.
+
+Su uso estuvo orientado principalmente a interpretar el enunciado, adaptar los ejemplos de la guía a la estructura y tecnologías de ListaFácil, comprender los comandos utilizados, analizar errores y revisar la configuración realizada.
+
+Las decisiones y cambios fueron verificados durante la implementación mediante builds locales, ejecuciones de GitHub Actions y comprobaciones en los Pull Requests.
