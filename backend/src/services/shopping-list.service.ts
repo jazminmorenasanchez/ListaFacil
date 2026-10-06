@@ -1,34 +1,13 @@
-import { PurchaseStatus } from '../generated/prisma/client'
 import { AppError } from '../lib/app-error'
 import { requireHousehold } from '../lib/household-access'
 import { prisma } from '../lib/prisma'
+import { createAddShoppingListItem, ensureListIsEditable, validateQuantity } from './add-shopping-list-item'
 
 interface ShoppingListUpdate {
   quantity?: unknown
   urgent?: unknown
   purchasedQuantity?: unknown
   catalogItemId?: unknown
-}
-
-function validateQuantity(quantity: unknown, defaultValue?: number): number {
-  const value = quantity === undefined ? defaultValue : quantity
-
-  if (!Number.isInteger(value) || (value as number) < 1) {
-    throw new AppError(400, 'La cantidad debe ser un entero mayor o igual a 1')
-  }
-
-  return value as number
-}
-
-async function ensureListIsEditable(transaction: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], householdId: string) {
-  const purchase = await transaction.purchase.findUnique({
-    where: { householdId },
-    select: { status: true },
-  })
-
-  if (purchase?.status === PurchaseStatus.IN_PROGRESS) {
-    throw new AppError(409, 'La lista no puede modificarse durante una compra en curso')
-  }
 }
 
 export async function getShoppingList(userId: string) {
@@ -49,26 +28,10 @@ export async function getShoppingList(userId: string) {
   }).then((items) => items.map(({ catalogItem, ...item }) => ({ ...item, name: catalogItem.name })))
 }
 
-export async function addShoppingListItem(userId: string, catalogItemId: string, requestedQuantity: unknown) {
-  const { householdId } = await requireHousehold(userId)
-  const quantity = validateQuantity(requestedQuantity, 1)
-
-  return prisma.$transaction(async (transaction) => {
-    await ensureListIsEditable(transaction, householdId)
-    const catalogItem = await transaction.catalogItem.findFirst({
-      where: { id: catalogItemId, householdId },
-      select: { id: true },
-    })
-
-    if (!catalogItem) throw new AppError(404, 'Producto de catálogo no encontrado')
-
-    return transaction.shoppingListItem.upsert({
-      where: { catalogItemId },
-      create: { catalogItemId, quantity },
-      update: { quantity: { increment: quantity } },
-    })
-  })
-}
+export const addShoppingListItem = createAddShoppingListItem({
+  requireHousehold,
+  transaction: (operation) => prisma.$transaction((transaction) => operation(transaction)),
+})
 
 export async function updateShoppingListItem(userId: string, itemId: string, update: ShoppingListUpdate) {
   const { householdId } = await requireHousehold(userId)

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Message } from '../components/Message'
 import { apiRequest } from '../services/api'
+import { futureDateIso } from '../lib/purchase-date'
 import type { HouseholdMember, Purchase, ShoppingListItem, User } from '../types'
 
 function minimumDateTime(): string {
@@ -10,19 +11,24 @@ function minimumDateTime(): string {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
 
-export function PurchasePage({ token, user }: { token: string; user: User }) {
+interface PurchasePageProps {
+  token: string
+  user: User
+  request?: typeof apiRequest
+}
+
+export function PurchasePage({ token, user, request = apiRequest }: PurchasePageProps) {
   const [purchase, setPurchase] = useState<Purchase | null>(null), [members, setMembers] = useState<HouseholdMember[]>([]), [list, setList] = useState<ShoppingListItem[]>([])
   const [responsible, setResponsible] = useState(''), [date, setDate] = useState(''), [error, setError] = useState(''), [loading, setLoading] = useState(true), [postponing, setPostponing] = useState(false)
-  async function load() { setLoading(true); setError(''); try { const [p, m, l] = await Promise.all([apiRequest<{ purchase: Purchase | null }>('/purchases/active', {}, token), apiRequest<{ members: HouseholdMember[] }>('/households/members', {}, token), apiRequest<{ items: ShoppingListItem[] }>('/shopping-list', {}, token)]); setPurchase(p.purchase); setMembers(m.members); setList(l.items); setResponsible((current) => current || m.members[0]?.id || '') } catch (caught) { setError(caught instanceof Error ? caught.message : 'Error inesperado') } finally { setLoading(false) } }
+  async function load() { setLoading(true); setError(''); try { const [p, m, l] = await Promise.all([request<{ purchase: Purchase | null }>('/purchases/active', {}, token), request<{ members: HouseholdMember[] }>('/households/members', {}, token), request<{ items: ShoppingListItem[] }>('/shopping-list', {}, token)]); setPurchase(p.purchase); setMembers(m.members); setList(l.items); setResponsible((current) => current || m.members[0]?.id || '') } catch (caught) { setError(caught instanceof Error ? caught.message : 'Error inesperado') } finally { setLoading(false) } }
   useEffect(() => { void load() }, [])
-  async function action(path: string, method = 'POST', body?: object): Promise<boolean> { setError(''); try { await apiRequest(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }, token); await load(); return true } catch (caught) { setError(caught instanceof Error ? caught.message : 'Error inesperado'); return false } }
+  async function action(path: string, method = 'POST', body?: object): Promise<boolean> { setError(''); try { await request(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }, token); await load(); return true } catch (caught) { setError(caught instanceof Error ? caught.message : 'Error inesperado'); return false } }
   function futureDate(): string | null {
-    const scheduledFor = new Date(date)
-    if (Number.isNaN(scheduledFor.getTime()) || scheduledFor.getTime() <= Date.now()) {
+    const scheduledFor = futureDateIso(new Date(date).getTime(), Date.now())
+    if (scheduledFor === null) {
       setError('La fecha programada debe ser futura')
-      return null
     }
-    return scheduledFor.toISOString()
+    return scheduledFor
   }
   async function schedule(event: FormEvent) { event.preventDefault(); const scheduledFor = futureDate(); if (scheduledFor) await action('/purchases', 'POST', { responsibleUserId: responsible, scheduledFor }) }
   async function postpone() { const scheduledFor = futureDate(); if (scheduledFor && await action('/purchases/postpone', 'POST', { scheduledFor })) { setPostponing(false); setDate('') } }
