@@ -10,7 +10,11 @@ COPY . .
 RUN npm run build
 
 
-# ---- Etapa 2: nginx sirve los estáticos ----
+# ---- Etapa 2: tests con coverage ----
+FROM build AS test
+CMD ["npm", "run", "test:ci"]
+
+# ---- Etapa 3: nginx sirve los estáticos ----
 FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf

@@ -6,6 +6,18 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reportsDirectory: 'coverage',
+      reporter: ['text', 'html', 'json-summary'],
+      reportOnFailure: true,
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.d.ts', 'src/types/index.ts', 'src/main.tsx'],
+      thresholds: {
+        lines: 48,
+        branches: 35,
+      },
+    },
   },
   server: {
     proxy: {
