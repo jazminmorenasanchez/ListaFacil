@@ -125,3 +125,69 @@ jobs:
           tags: frontend:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Construir la imagen de tests del frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          target: test
+          push: false
+          load: true
+          tags: frontend-test:ci
+          cache-from: type=gha,scope=frontend-test
+          cache-to: type=gha,mode=max,scope=frontend-test
+
+      - name: Ejecutar tests del frontend con coverage
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/frontend/coverage"
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/frontend/coverage:/app/coverage" \
+            frontend-test:ci npm run test:ci -- --coverage.enabled --coverage.clean=false
+
+      - name: Publicar resumen de coverage del frontend
+        if: ${{ !cancelled() }}
+        run: |
+          if [ ! -f "$GITHUB_WORKSPACE/frontend/coverage/coverage-summary.json" ]; then
+            echo 'No se generó coverage-summary.json del frontend.' >&2
+            exit 1
+          fi
+
+          docker run --rm -i \
+            --entrypoint node \
+            --volume "$GITHUB_WORKSPACE/frontend/coverage:/app/coverage:ro" \
+            frontend-test:ci - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+
+          try {
+            const report = JSON.parse(fs.readFileSync('/app/coverage/coverage-summary.json', 'utf8'));
+            const { lines, branches, functions } = report.total;
+            for (const metric of [lines, branches, functions]) {
+              if (
+                !Number.isFinite(metric?.pct) ||
+                !Number.isFinite(metric?.covered) ||
+                !Number.isFinite(metric?.total)
+              ) {
+                throw new Error('El resumen no contiene métricas válidas');
+              }
+            }
+            if (lines.total === 0) throw new Error('El reporte de frontend no contiene líneas medibles');
+
+            console.log('### Coverage del frontend\n');
+            console.log('| Métrica | Coverage | Cubiertos / total |');
+            console.log('|---|---:|---:|');
+            for (const [name, metric] of [['Lines', lines], ['Branches', branches], ['Functions', functions]]) {
+              console.log(`| ${name} | ${metric.pct}% | ${metric.covered}/${metric.total} |`);
+            }
+          } catch (error) {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 1;
+          }
+          NODE
+
+      - name: Publicar reporte de coverage del frontend
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: error
