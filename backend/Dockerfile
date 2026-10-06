@@ -24,6 +24,15 @@ RUN npx prisma generate
 RUN npm run build
 
 
+# ---- Etapa de tests ----
+FROM build AS test
+
+COPY tests ./tests
+COPY vitest.config.mts ./
+
+CMD ["npm", "run", "test:coverage", "--", "--coverage.reportsDirectory=/app/coverage/report"]
+
+
 # ---- Etapa 2: runtime ----
 FROM node:24-bookworm-slim AS final
 

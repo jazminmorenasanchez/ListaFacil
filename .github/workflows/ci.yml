@@ -30,6 +30,79 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
+      - name: Construir la imagen de tests del backend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          target: test
+          push: false
+          load: true
+          tags: backend-test:ci
+          cache-from: type=gha,scope=backend-test
+          cache-to: type=gha,mode=max,scope=backend-test
+
+      - name: Ejecutar tests del backend con coverage
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/backend/coverage"
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/backend/coverage:/app/coverage" \
+            backend-test:ci
+
+      - name: Publicar resumen de coverage del backend
+        if: ${{ !cancelled() }}
+        run: |
+          if [ ! -f "$GITHUB_WORKSPACE/backend/coverage/report/coverage-summary.json" ]; then
+            printf '%s\n' \
+              '### Coverage del backend' \
+              '' \
+              'No se generó coverage-summary.json. Revisar los pasos de build y tests.' \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          docker run --rm -i \
+            --entrypoint node \
+            --volume "$GITHUB_WORKSPACE/backend/coverage:/app/coverage:ro" \
+            backend-test:ci - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('node:fs');
+
+          console.log('### Coverage del backend\n');
+
+          try {
+            const report = JSON.parse(fs.readFileSync(
+              '/app/coverage/report/coverage-summary.json',
+              'utf8',
+            ));
+            const { lines, branches } = report.total;
+
+            for (const metric of [lines, branches]) {
+              if (
+                !Number.isFinite(metric?.pct) ||
+                !Number.isFinite(metric?.covered) ||
+                !Number.isFinite(metric?.total)
+              ) {
+                throw new Error('El resumen no contiene métricas válidas');
+              }
+            }
+
+            console.log('| Métrica | Coverage | Cubiertos / total |');
+            console.log('|---|---:|---:|');
+            console.log(`| Line coverage | ${lines.pct}% | ${lines.covered}/${lines.total} |`);
+            console.log(`| Branch coverage | ${branches.pct}% | ${branches.covered}/${branches.total} |`);
+          } catch (error) {
+            console.log('No se pudo interpretar el resumen de coverage. Revisar los logs y el artefacto.');
+            console.error(error instanceof Error ? error.message : String(error));
+          }
+          NODE
+
+      - name: Publicar reporte de coverage del backend
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage
+          path: backend/coverage/report/
+          if-no-files-found: warn
+
   build-frontend:
     runs-on: ubuntu-latest
     steps:
