@@ -38,7 +38,7 @@ describe('apiRequest', () => {
     expect(json).not.toHaveBeenCalled()
   })
 
- it.skip.each([
+ it.each([
     { status: 422, token: 'test-token', payload: { message: 'Cantidad inválida' }, invalidJson: false, message: 'Cantidad inválida', events: 0 },
     { status: 500, token: 'test-token', payload: {}, invalidJson: false, message: 'No se pudo completar la operación', events: 0 },
     { status: 502, token: 'test-token', payload: {}, invalidJson: true, message: 'No se pudo completar la operación', events: 0 },
