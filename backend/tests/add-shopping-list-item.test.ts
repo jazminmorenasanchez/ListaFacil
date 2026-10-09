@@ -38,6 +38,30 @@ function setup() {
 }
 
 describe('addShoppingListItem', () => {
+  it.each([0, -1, 1.5])('rechaza cantidad inválida %s antes de abrir una transacción', async (quantity) => {
+    const { addShoppingListItem, transaction, upsert } = setup()
+    const result = addShoppingListItem('user-1', 'product-1', quantity)
+    await expect(result).rejects.toBeInstanceOf(AppError)
+    await expect(result).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'La cantidad debe ser un entero mayor o igual a 1',
+    })
+    expect(transaction).not.toHaveBeenCalled()
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  it('rechaza un producto inexistente o ajeno al hogar sin ejecutar upsert', async () => {
+    const { addShoppingListItem, findCatalogItem, upsert } = setup()
+    findCatalogItem.mockResolvedValue(null)
+    const result = addShoppingListItem('user-1', 'product-1', 1)
+    await expect(result).rejects.toBeInstanceOf(AppError)
+    await expect(result).rejects.toMatchObject({ statusCode: 404, message: 'Producto de catálogo no encontrado' })
+    expect(findCatalogItem).toHaveBeenCalledWith({
+      where: { id: 'product-1', householdId: 'household-1' }, select: { id: true },
+    })
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
   it('agrega un producto del hogar con cantidad 3 mediante un único upsert de creación o incremento', async () => {
     const { addShoppingListItem, item, requireHousehold, transaction, findCatalogItem, upsert } = setup()
 
