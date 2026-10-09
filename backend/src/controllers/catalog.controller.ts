@@ -22,6 +22,27 @@ export async function list(request: Request, response: Response, next: NextFunct
   }
 }
 
+export async function suggestions(request: Request, response: Response, next: NextFunction): Promise<void> {
+  try {
+    const search = request.query.search ?? ''
+    if (typeof search !== 'string') throw new AppError(400, 'La búsqueda debe ser un texto')
+    const requestedLimit = request.query.limit
+    let limit: number | undefined
+    if (requestedLimit !== undefined) {
+      if (typeof requestedLimit !== 'string' || !/^[0-9]+$/.test(requestedLimit)) {
+        throw new AppError(400, 'El límite debe ser un entero entre 1 y 20')
+      }
+      limit = Number(requestedLimit)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+        throw new AppError(400, 'El límite debe ser un entero entre 1 y 20')
+      }
+    }
+    response.json({ items: await catalogService.getCatalogSuggestions(userId(request), search, limit) })
+  } catch (error) {
+    next(error)
+  }
+}
+
 export async function create(request: Request, response: Response, next: NextFunction): Promise<void> {
   try {
     if (typeof request.body?.name !== 'string') throw new AppError(400, 'El nombre es obligatorio')

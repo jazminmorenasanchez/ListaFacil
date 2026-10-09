@@ -2,6 +2,16 @@ import { AppError } from '../lib/app-error'
 import { requireHousehold, requireHouseholdAdmin } from '../lib/household-access'
 import { comparableProductName, normalizeProductName } from '../lib/product-name'
 import { prisma } from '../lib/prisma'
+import { suggestCatalogItems } from '../lib/catalog-suggestions'
+
+export async function getCatalogSuggestions(userId: string, search: string, limit?: number) {
+  const { householdId } = await requireHousehold(userId)
+  const items = await prisma.catalogItem.findMany({
+    where: { householdId },
+    select: { id: true, name: true },
+  })
+  return suggestCatalogItems(items, search, limit)
+}
 
 function isUniqueConstraintError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'
