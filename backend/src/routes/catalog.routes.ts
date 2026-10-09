@@ -6,6 +6,7 @@ export const catalogRouter = Router()
 
 catalogRouter.use(authenticate)
 catalogRouter.get('/', catalogController.list)
+catalogRouter.get('/suggestions', catalogController.suggestions)
 catalogRouter.post('/', catalogController.create)
 catalogRouter.patch('/:itemId', catalogController.update)
 catalogRouter.delete('/:itemId', catalogController.remove)
