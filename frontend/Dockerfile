@@ -17,7 +17,12 @@ CMD ["npm", "run", "test:ci"]
 # ---- Etapa 3: nginx sirve los estáticos ----
 FROM nginx:alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV BACKEND_URL=http://backend:3000 \
+    DNS_RESOLVER=127.0.0.11 \
+    PORT=80 \
+    NGINX_ENVSUBST_FILTER="^(BACKEND_URL|DNS_RESOLVER|PORT)$"
+
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
