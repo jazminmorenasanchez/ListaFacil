@@ -71,7 +71,7 @@ def list_deploys(service, token, deadline, created_after=None):
 def start_deploy(service, hook, token, deadline):
     # Exclude existing deploy IDs as well as old creation times: a previous
     # deployment of the same SHA must never satisfy this run.
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
     previous = {deploy["id"] for deploy in list_deploys(service, token, deadline, cutoff)}
     status, body = request(f"{hook}&ref={os.environ['GITHUB_SHA']}", method="POST")
     if status not in (200, 202):
