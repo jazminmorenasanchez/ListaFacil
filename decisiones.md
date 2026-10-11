@@ -6,6 +6,7 @@
 - [TP2 - Contenedores: la app del semestre](#tp2--contenedores-la-app-del-semestre)
 - [TP3 - Planificación y trazabilidad](#tp3--planificación-y-trazabilidad)
 - [TP4 - CI: Pipelines as Code](#tp4---ci-pipelines-as-code)
+- [TP5 - Tests y cobertura como requisito de merge](#tp5---tests-y-cobertura-como-requisito-de-merge)
 
 
 ## TP1 - Git colaborativo
@@ -308,3 +309,142 @@ Se utilizó inteligencia artificial como herramienta de apoyo durante el desarro
 Su uso estuvo orientado principalmente a interpretar el enunciado, adaptar los ejemplos de la guía a la estructura y tecnologías de ListaFácil, comprender los comandos utilizados, analizar errores y revisar la configuración realizada.
 
 Las decisiones y cambios fueron verificados durante la implementación mediante builds locales, ejecuciones de GitHub Actions y comprobaciones en los Pull Requests.
+
+## TP5 - Tests y cobertura como requisito de merge
+
+### Objetivo y adaptación de la guía al stack de ListaFácil
+
+El objetivo del TP5 fue incorporar pruebas significativas y comprobar que una pérdida de cobertura pudiera impedir el merge, aunque la compilación y los tests ejecutados funcionaran correctamente. Trabajé sobre el backend Node.js + TypeScript y el frontend React + TypeScript de ListaFácil.
+
+En ambos proyectos utilicé Vitest 5.0.3 y `@vitest/coverage-v8` 5.0.3. Las versiones resueltas están registradas en los lockfiles y los Dockerfiles ejecutan `npm ci`, que instala conforme a esos archivos. En backend las dependencias declaran `^5.0.3`, mientras que en frontend declaran `5.0.3`; por eso distingo el rango de `package.json` de la versión efectivamente fijada en el lockfile.
+
+La guía usa ejemplos de .NET, pero no incorporé herramientas de ese stack a la aplicación. Adapté los mecanismos: `it.each` —o su equivalente `test.each`— para parametrizar; `vi.fn`, `vi.mock` y dependencias inyectadas para dobles; coverage V8 para medir; `coverage.thresholds` para hacer fallar Vitest; e `include`/`exclude` para definir la población. Las configuraciones están en [backend/vitest.config.mts](backend/vitest.config.mts) y [frontend/vite.config.ts](frontend/vite.config.ts).
+
+### Lógica de negocio elegida y consecuencias de los errores
+
+Elegí reglas que afectan operaciones reales de compras compartidas, en lugar de probar funciones sin uso sólo para aumentar porcentajes.
+
+En el agregado a la lista probé que la cantidad sea un entero positivo, que se use 1 cuando no se informa y que una compra en curso bloquee modificaciones. Una cantidad inválida o una edición durante la compra podría cambiar lo que el responsable necesita comprar. En [add-shopping-list-item.test.ts](backend/tests/add-shopping-list-item.test.ts) están, entre otros, los tests «rechaza cantidad inválida %s antes de abrir una transacción» y «rechaza una compra IN_PROGRESS con AppError 409 antes de buscar el producto o ejecutar upsert». También se comprueba que un producto inexistente o ajeno al hogar no llegue al upsert.
+
+En autorización probé usuario inexistente, usuario sin hogar, rechazo de MEMBER cuando se exige administrador y permiso de ADMIN. Un error en esas decisiones podría permitir acciones de administración a quien no corresponde. La tabla de escenarios está en [household-access.test.ts](backend/tests/household-access.test.ts), sobre `requireHousehold` y `requireHouseholdAdmin`.
+
+En compras elegí fechas inválidas, pasadas o iguales a ahora; estados y responsable al iniciar; y límites de cantidad comprada. Un fallo podría programar compras vencidas, iniciar una compra en un estado incorrecto o registrar cantidades superiores a las necesarias. [purchase-service.test.ts](backend/tests/purchase-service.test.ts) contiene «rechaza fecha $date antes de abrir una transacción», «iniciar compra: $scenario» y «valida límites de cantidad comprada: $quantity».
+
+En catálogo probé normalización y equivalencia de nombres para evitar duplicados como «Café molido» y «CAFE MOLIDO». Los límites de longitud y comparaciones están en [product-name.test.ts](backend/tests/product-name.test.ts); el rechazo del duplicado y la creación con nombre normalizado están en [catalog-service.test.ts](backend/tests/catalog-service.test.ts).
+
+Posteriormente agregué sugerencias por relevancia como funcionalidad nueva: coincidencia exacta, prefijo, palabras en diferente orden y fragmento, con desempates determinísticos y límites. Esto ayuda a encontrar productos mientras se escribe, conservando la búsqueda tradicional. Su ranking se prueba en [catalog-suggestions.test.ts](backend/tests/catalog-suggestions.test.ts), el alcance por hogar en [catalog-suggestions-service.test.ts](backend/tests/catalog-suggestions-service.test.ts) y los parámetros del controller en [catalog-suggestions-controller.test.ts](backend/tests/catalog-suggestions-controller.test.ts). Esta incorporación corresponde al [PR #28](https://github.com/jazminmorenasanchez/ListaFacil/pull/28), y no a una regla que ya existiera antes de los tests.
+
+### Técnicas de prueba: AAA, parametrización, bordes y dobles
+
+Un ejemplo de Arrange/Act/Assert es el test «rechaza un producto inexistente o ajeno al hogar sin ejecutar upsert». En Arrange preparo las dependencias y hago que el lookup del catálogo devuelva `null`. En Act llamo al agregado con usuario, producto y cantidad. En Assert verifico `AppError`, status 404, mensaje exacto, lookup restringido al hogar y ausencia de upsert. No alcanza con comprobar que ocurrió cualquier error: importa que se rechace por la causa prevista y antes de escribir.
+
+Usé `it.each` para recorrer variantes de una misma regla. Entre los bordes están cantidad 0, negativa y fraccionaria; nombre de 120 caracteres aceptado y de 121 rechazado; fecha exactamente igual a ahora; cantidad comprada cero y límite superior; y límites de sugerencias inválidos. Las assertions verifican resultados, status, mensajes e interacciones relevantes, sin agregar variantes sólo para aumentar la cantidad de casos.
+
+Para backend utilicé mocks de Prisma y autorización, además de dependencias inyectadas en el agregado a la lista. Los fakes de `$transaction` ejecutan el callback con los métodos necesarios. Para fechas fijé el reloj y lo restauré después. Estas pruebas no requieren PostgreSQL ni `DATABASE_URL`, pero tampoco demuestran rollback, aislamiento o concurrencia reales de la base de datos. Los tests directos del controller usan dobles de Request/Response: no verifican el transporte HTTP ni el montaje completo de Express.
+
+En frontend separé lógica pura de componentes. [purchase-date.test.ts](frontend/tests/purchase-date.test.ts) declara entorno Node y contiene cinco casos sin DOM en dos declaraciones `it.each`: fecha claramente posterior, 1 ms posterior, 1 ms anterior, fecha igual a ahora y `NaN`. No los describo como cuatro declaraciones independientes ni cuento los tests de componentes como pruebas sin DOM.
+
+Los tests de [purchase-page.test.tsx](frontend/tests/purchase-page.test.tsx), [shopping-list-page.test.tsx](frontend/tests/shopping-list-page.test.tsx) y [catalog-suggestions-page.test.tsx](frontend/tests/catalog-suggestions-page.test.tsx) sí montan componentes con DOM. Verifican interacción, permisos visibles, fechas que vencen antes del envío, debounce de 300 ms, resultados vacíos, errores, agregado de sugerencias, respuestas desactualizadas y limpieza al desmontar. Para eso utilicé API mockeada o inyectada, timers falsos y promesas controladas, sin solicitudes de red reales.
+
+En [api.test.ts](frontend/tests/api.test.ts) sustituí fetch con `vi.stubGlobal` y utilicé Responses con su lectura JSON simulada. Probé headers y token, respuesta 204 sin intentar leer JSON y errores HTTP 422, 500, 502 y 401. Se comprueba el mensaje del servidor, el fallback cuando falta mensaje o falla JSON y el evento de sesión no autorizada cuando corresponde. Algunos casos usan eventos de `window`, por lo que no los presento como una suite íntegramente sin DOM. Los globals se restauran y los listeners se retiran.
+
+### Refactors para aislar dependencias sin inventar reglas
+
+Para testear el agregado extraje [add-shopping-list-item.ts](backend/src/services/add-shopping-list-item.ts), con interfaces para autorización y transacción y la factory `createAddShoppingListItem`. [shopping-list.service.ts](backend/src/services/shopping-list.service.ts) conecta esas dependencias con Prisma en producción. La validación de cantidad, el bloqueo y el upsert ya existían; el cambio permitió aislarlos sin utilizar la base real.
+
+En frontend extraje la validación de fecha a [purchase-date.ts](frontend/src/lib/purchase-date.ts) y agregué el parámetro opcional `request` a [PurchasePage.tsx](frontend/src/pages/PurchasePage.tsx), con `apiRequest` como valor predeterminado. La regla de fecha futura también existía: se separó para probarla como función pura. El diff histórico del commit `b3af1af` permite comprobar estas extracciones. No agregué esas reglas para alcanzar el mínimo del TP.
+
+### Medición y elección de thresholds
+
+Configuré provider V8 y reporters `text`, `html` y `json-summary` en ambos proyectos; backend también genera `json`, que permite consultar contadores de ramas de código. El HTML sirve para explorar archivos y caminos, mientras que el resumen JSON aporta porcentajes y fracciones verificables.
+
+Al configurar los thresholds, la suite backend completa medía lines 14.23% (73/513) y branches 14.33% (40/279). Fijé mínimos de 13% para ambas métricas. En frontend la suite medía lines 51.08% (47/92) y branches 37.95% (63/166), y fijé mínimos de 48% y 35%. Son valores próximos, pero inferiores, a las mediciones de ese momento: permitían conservar la suite verde y detectar una pérdida significativa de pruebas. No copié el 70% de un ejemplo ni interpreté estos mínimos como una certificación de calidad de todo el backend.
+
+La demostración frontend quedó en el [PR #26](https://github.com/jazminmorenasanchez/ListaFacil/pull/26). Al omitir temporalmente una declaración de cinco casos HTTP, los 20 casos ejecutados pasaron, pero coverage cayó a lines 45.65% y branches 33.73%, incumpliendo ambos mínimos en la [corrida roja](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37540531404). Después restauré la declaración y la [corrida verde](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37540805578) confirmó la recuperación.
+
+En backend, el [PR #27](https://github.com/jazminmorenasanchez/ListaFacil/pull/27) comprobó el mismo mecanismo. La omisión temporal de los cinco casos de cantidad comprada dejó 34 casos aprobados, pero lines 11.69% y branches 11.11%, con falla de ambos thresholds en la [corrida roja](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37980894972). Restauré los tests antes de la [corrida verde](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37981190836) y del merge. Esas omisiones fueron ejercicios controlados de los gates, no el estado final de las suites.
+
+Después del merge del PR #28, el baseline de `main` pasó a ser:
+
+| Proyecto | Lines | Branches | Casos aprobados |
+|---|---:|---:|---:|
+| Backend | 20.07% (110/548) | 25.62% (82/320) | 80 |
+| Frontend | 61.90% (65/105) | 47.34% (89/188) | 36 |
+
+Estos valores corresponden a la suite ampliada y no son las mediciones con las que inicialmente elegí 13/13 y 48/35. La recuperación está respaldada por la [corrida verde del PR #28](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37985981767). Reporto branches junto con lines porque ejecutar una línea no implica recorrer todas sus decisiones.
+
+### Población de coverage y exclusiones justificadas
+
+En backend conservé `include: ['src/**/*.ts']`, para que un service nuevo sin pruebas entre automáticamente y afecte la medición. Agregué exactamente estas exclusiones:
+
+- `src/generated/**`: código y tipos generados por Prisma, no lógica escrita por nosotros.
+- `src/routes/**/*.routes.ts`: wiring actual de rutas y middleware, sin reglas del dominio.
+- `src/types/**/*.d.ts`: declaraciones de tipos, sin ejecución.
+- `src/data/default-catalog.ts`: datos constantes del catálogo inicial; la operación que los utiliza sigue contando.
+
+Controllers, services, middleware, `app.ts` y `lib/prisma.ts` permanecen incluidos, aunque tengan 0%. No excluí archivos por carecer de tests. El bootstrap del backend también contiene decisiones de CORS y errores; el adaptador Prisma valida configuración, por lo que no los traté automáticamente como código generado.
+
+En frontend mantuve `include: ['src/**/*.{ts,tsx}']` y excluí exactamente `src/**/*.d.ts`, `src/types/index.ts` y `src/main.tsx`: declaraciones, interfaces/aliases y montaje inicial de React, respectivamente. Las páginas, helpers y cliente API siguen contando. Excluir wiring de la métrica no significa que su integración esté verificada: requiere pruebas apropiadas por separado. Las justificaciones corresponden al contenido actual de esas familias, no a cualquier comportamiento que pudiera agregarse allí en el futuro.
+
+### CI, reportes y bloqueo de merge
+
+Mantuve los jobs `build-backend` y `build-frontend` de [.github/workflows/ci.yml](.github/workflows/ci.yml). Cada uno construye la imagen normal de la aplicación y una imagen del target Docker `test`. Backend ejecuta `npm run test:coverage`; frontend ejecuta `npm run test:ci`. No incorporé PostgreSQL al contenedor de tests unitarios.
+
+El recorrido del error es Vitest → script npm → proceso del contenedor ejecutado con `docker run` → paso de GitHub Actions → job → check Required de `main`. Vitest devuelve error cuando no alcanza el threshold y no hay `continue-on-error` ni `|| true` que neutralice ese resultado. La protección de `main` exige ambos checks, estar actualizado con la base y se aplica también a administradores. Los PR #26 y #27 enlazados muestran que coverage puede bloquear el merge aun cuando los casos ejecutados estén verdes.
+
+Configuré `reportOnFailure: true` y publicación de summary y artefactos `backend-coverage` y `frontend-coverage`, descargables desde las corridas. Los pasos de publicación usan `!cancelled()` para ejecutarse también después de una falla. En la [corrida roja del PR #28](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37984846990) se publicaron ambos reportes. Si el build falla antes de ejecutar Vitest, esa condición no puede fabricar un reporte inexistente: backend advierte cuando falta y frontend marca error. Publicar un summary tampoco revierte una falla previa del job.
+
+### Por qué coverage alto no garantiza calidad
+
+`add-shopping-list-item.ts` tiene 100% de lines y branches en el baseline posterior al PR #28, pero un test que sólo comprobara «se llamó a upsert» podría aceptar un incremento incorrecto. Por ejemplo, incrementar 1 cuando se pidieron 3 unidades ejecutaría el mismo camino y perjudicaría la lista del hogar.
+
+Por eso el test «agrega un producto del hogar con cantidad 3 mediante un único upsert de creación o incremento» comprueba `create: { catalogItemId: 'product-1', quantity: 3 }` y `update: { quantity: { increment: 3 } }`, además del resultado y del lookup del hogar. Puede verse en [add-shopping-list-item.test.ts](backend/tests/add-shopping-list-item.test.ts). El porcentaje muestra qué se ejecutó; esas assertions verifican qué hizo. Aun con ellas, el fake no prueba las garantías de transacción o concurrencia de PostgreSQL.
+
+### Ejercicio de una rama de código sin cubrir
+
+Identifiqué una decisión sin probar en [purchase.service.ts](backend/src/services/purchase.service.ts), alrededor de la línea 143:
+
+```ts
+if (purchase.responsibleUserId !== userId)
+  throw new AppError(403, 'Solo el responsable puede registrar cantidades compradas')
+```
+
+El reporte JSON real del baseline posterior al PR #28 registra `[0, 3]` para ese `if`: el rechazo no se ejecutó y el camino permitido se recorrió tres veces. Se trata de una rama del código, no de una rama Git.
+
+Una entrada concreta sería `updatePurchasedQuantity('user-2', 'item-1', 1)`, con hogar autorizado y compra `IN_PROGRESS` cuyo `responsibleUserId` sea `'user-1'`. El resultado esperado es 403 sin modificación del item; el rechazo ocurre antes de buscarlo o actualizarlo.
+
+Decidí no agregar ese caso en esta entrega y dejarlo registrado como prueba prioritaria posterior. La regla impide que otro integrante registre compras en nombre del responsable. Ocultar el control en frontend no reemplaza la autorización backend. Un test con transacción fake podría comprobar el error exacto y la ausencia de escritura sin usar DB real.
+
+### Primer PR de §3.5: sugerencias automáticas del catálogo
+
+En el [PR #28](https://github.com/jazminmorenasanchez/ListaFacil/pull/28) agregué primero código productivo sin tests nuevos: ranking puro que reutiliza `comparableProductName`, service restringido al hogar, controller y endpoint dedicado, y sugerencias automáticas con debounce de 300 ms mientras se escribe. Conservé el botón Buscar y su comportamiento. El frontend cancela solicitudes anteriores e ignora respuestas desactualizadas.
+
+En esa primera etapa las compilaciones y los tests existentes pasaban, pero backend quedó con branches 12.50% < 13%; frontend con lines 44.76% < 48% y branches 33.51% < 35%. La [corrida roja](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37984846990) muestra 39 casos backend y 25 frontend aprobados y los mensajes de threshold. No fue necesario bajar mínimos ni omitir tests para esta demostración.
+
+Después agregué 41 casos backend y 11 frontend del comportamiento nuevo: ranking, límites, normalización, autorización/consulta, parámetros, debounce, errores, agregado y respuestas fuera de orden. Las suites quedaron en 80 y 36 casos aprobados. Coverage superó los thresholds originales, ambos checks quedaron verdes en la [corrida de recuperación](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37985981767) y el PR fue mergeado. Los tests agregados verifican la funcionalidad que provocó el rojo, no código ajeno elegido sólo para aumentar porcentajes.
+
+### Segundo PR de §3.5: exportación CSV con vista previa
+
+El [PR #29](https://github.com/jazminmorenasanchez/ListaFacil/pull/29) incorpora exportación de la lista con un consumidor real en `ShoppingListPage`. El usuario elige Pendientes/Todos, prepara una lectura actualizada mediante `/shopping-list` con token, revisa la instantánea y confirma la descarga o cancela. Cambiar el alcance descarta la vista previa y exige prepararla otra vez. La exportación sigue disponible durante una compra en curso porque no modifica datos.
+
+Centralicé filtrado y cálculo de pendientes en [shopping-list-csv.ts](frontend/src/lib/shopping-list-csv.ts), compartidos por la tabla de preview y la serialización. Las columnas son Producto, Cantidad necesaria, Cantidad comprada, Cantidad pendiente y Urgente. Se conservan orden y nombres, se escapan comas/comillas/saltos de línea y se usan CRLF. La lista vacía y la ausencia de pendientes tienen mensajes distintos y permiten descargar sólo el encabezado. [download-csv.ts](frontend/src/lib/download-csv.ts) genera `lista-compras.csv` con Blob, MIME CSV, BOM UTF-8 para facilitar reconocimiento de Unicode en Excel y limpieza del enlace y URL temporales. La descarga usa las filas mostradas, sin una segunda consulta.
+
+No agregué tests de esa exportación a propósito y el PR permanece abierto, sin merge, para la defensa. Backend no cambia. Frontend mide lines 46.10% (71/154), por debajo de 48%, y branches 41.93% (91/217), por encima de 35%. En el [intento 1](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37989195465/attempts/1), frontend construyó, aprobó 36 casos y falló específicamente por lines. Ese intento publicó su artefacto de coverage y sirve como evidencia del gate; el PR está bloqueado.
+
+No todos los fallos de ese PR fueron por coverage. Backend ya sufrió un HTTP 429 de Docker Hub en el primer intento. En el [intento 2](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/37989195465/attempts/2), ambos jobs fallaron al resolver imágenes: `node:24-bookworm-slim` y `nginx:alpine`. No llegaron a ejecutar tests con coverage. Ese segundo intento demuestra un incidente de infraestructura, no el gate de cobertura, y no lo doy por resuelto.
+
+### Problemas encontrados y cómo los abordé
+
+El primer ajuste fue aislar dependencias para que los tests no necesitaran PostgreSQL ni red. Lo abordé con las extracciones y dobles descritos, conservando las reglas existentes y distinguiendo qué garantías podían verificar los fakes.
+
+También comprobé que agregar funcionalidad sin tests no asegura automáticamente un rojo. La descarga CSV inmediata quedó inicialmente verde: frontend lines 50.73% (69/136) y branches 44.55% (90/202). No amplié el código con relleno ni cambié thresholds. La vista previa respondió a una necesidad concreta: revisar los productos y cantidades de la lectura actualizada antes de descargar exactamente esa instantánea. Con ese comportamiento real, el resultado pasó a lines 46.10% y branches 41.93%, como muestra el intento 1 del PR #29 enlazado.
+
+Para las demostraciones de §3.5 mantuve todos los tests existentes habilitados. Los skips temporales de los ejercicios anteriores de thresholds fueron restaurados antes de sus merges. No confundo esos ejercicios con las dos funcionalidades nuevas de §3.5.
+
+El HTTP 429 de Docker Hub impidió que la última corrida del PR #29 llegara a coverage. Conservé la distinción entre evidencia de aplicación y falla de infraestructura y registré el intento 1 como prueba válida. No afirmo que el incidente se haya solucionado ni alteré el PR abierto para ocultarlo.
+
+### Declaración de uso de IA y verificación
+
+Utilicé ChatGPT como apoyo para interpretar la consigna, diseñar las decisiones y revisar cómo explicarlas. Utilicé Codex para leer el repositorio, analizar población de coverage, implementar cambios y escribir pruebas del primer PR, además de preparar la exportación y su vista previa sin tests nuevos para el segundo.
+
+La verificación se apoyó en revisión de diffs, builds, ejecución de tests, porcentajes y fracciones de coverage y consultas a GitHub Actions y Pull Requests. Las corridas enlazadas permiten comprobar el paso de rojo a verde y la causa concreta de cada fallo. No considero la respuesta de una IA ni un porcentaje como evidencia suficiente por sí solos, y no atribuyo a estas pruebas una validación manual completa de navegador, Excel, transporte HTTP o PostgreSQL real que no se haya realizado.
