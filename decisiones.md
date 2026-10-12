@@ -568,15 +568,21 @@ Por ese motivo, el pipeline complementa los smoke tests consultando la API de Re
 
 ### 7. Patrón de despliegue y reproducibilidad
 
-Se eligió el despliegue administrado por Render, que reemplaza las instancias de los servicios durante una actualización. No se implementó un mecanismo propio de blue-green o canary porque requeriría infraestructura y complejidad adicionales para el alcance del TP.
+**Plan de rollback y demostración**
 
-Backend y frontend se despliegan como servicios independientes. Por lo tanto, una actualización podría completarse en uno y fallar en el otro, dejando temporalmente versiones diferentes. Esto hace necesario mantener compatibilidad entre componentes.
+Se decidió utilizar los Deploy Hooks de Render con un SHA explícito para recuperar una versión anterior conocida y verificada, sin depender del HEAD actual de `main`.
 
-Una limitación importante es que **Render reconstruye las imágenes Docker desde el repositorio**, utilizando el SHA indicado en el hook, en lugar de desplegar directamente las imágenes publicadas en GHCR.
+Primero se creó la release `v6.0.0`, apuntando al commit `1f8e5cf06dfe219d96f6e620d8510badcd615e32`, que estaba desplegado en ambos servicios de PROD.
 
-Esto permite identificar el código utilizado, pero se pierde la garantía de que QA y PROD ejecuten exactamente el mismo artefacto previamente verificado por CI. Para obtener esa garantía sería necesario promover una misma imagen preconstruida, idealmente identificada por su digest.
+Para demostrar el rollback, se incorporó un cambio posterior en `/health`, agregando el campo `version: "post-v6-rollback-demo"`. El cambio se integró mediante PR, superó las verificaciones, se desplegó automáticamente a QA y llegó a PROD después de la aprobación manual.
 
-El procedimiento de rollback y su duración se documentarán después de realizar la demostración correspondiente al punto 3.5.
+Una vez comprobado que la nueva versión estaba activa, se ejecutaron los Deploy Hooks del backend y frontend de PROD indicando el SHA de `v6.0.0`.
+
+**El rollback tardó 63 segundos**, medidos desde el envío de los hooks hasta comprobar que ambos servicios figuraban como `Live` en Render con el commit anterior.
+
+Finalmente, se verificó que `/health` volviera a responder sin el campo `version`, confirmando que se había restaurado el código de `v6.0.0`.
+
+Este procedimiento revierte el código desplegado, pero **no deshace automáticamente migraciones de base de datos ni recupera datos eliminados**. Por eso, ante cambios de esquema incompatibles, sería necesario evaluar la compatibilidad de la versión anterior y un procedimiento de recuperación de datos.
 
 ### 8. Problemas encontrados y soluciones
 
