@@ -23,7 +23,7 @@ app.use((request, response, next) => {
 app.use(express.json())
 
 app.get('/health', (_request, response) => {
-  response.json({ status: 'ok' })
+  response.json({ status: 'ok', version: 'post-v6-rollback-demo' })
 })
 
 app.use('/api/auth', authRouter)
