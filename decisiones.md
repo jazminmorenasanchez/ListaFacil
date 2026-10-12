@@ -7,6 +7,7 @@
 - [TP3 - Planificación y trazabilidad](#tp3--planificación-y-trazabilidad)
 - [TP4 - CI: Pipelines as Code](#tp4---ci-pipelines-as-code)
 - [TP5 - Tests y cobertura como requisito de merge](#tp5---tests-y-cobertura-como-requisito-de-merge)
+- [TP6 — Continuous Delivery](#tp6--continuous-delivery)
 
 
 ## TP1 - Git colaborativo
@@ -478,3 +479,139 @@ Durante las corridas de GitHub Actions también apareció un error `429 Too Many
 Utilicé ChatGPT para interpretar la consigna, organizar el trabajo y revisar las decisiones técnicas. También utilicé Codex para analizar el código, implementar cambios y desarrollar pruebas.
 
 Comprobé los resultados mediante compilaciones, ejecución de tests, reportes de cobertura y corridas de GitHub Actions.
+
+## TP6 — Continuous Delivery
+
+## Enlaces de este TP — TP6
+
+- [Paquete público del backend en GHCR](https://github.com/jazminmorenasanchez/ListaFacil/pkgs/container/listafacil-backend).
+- [Paquete público del frontend en GHCR](https://github.com/jazminmorenasanchez/ListaFacil/pkgs/container/listafacil-frontend).
+- En ambos paquetes, la versión de referencia es `sha-1e15efbf999c9f6144903d34d8e555d29e1626e5`, correspondiente al merge del PR #38.
+- [Job del PR #32 para revisar que «Entrar al registry» se saltea](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/38147925162/job/114495075443?pr=32).
+- [Corrida de main posterior al merge del PR #38: builds, QA y PROD](https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/38186585823).
+- QA: [backend](https://listafacil-api-qa.onrender.com) y [frontend](https://listafacil-web-qa.onrender.com).
+- PROD: [backend](https://listafacil-api-prod.onrender.com) y [frontend](https://listafacil-web-prod.onrender.com).
+
+### 1. Publicación de imágenes verificadas
+
+Se decidió publicar las imágenes Docker de ListaFácil en GitHub Container Registry (GHCR) únicamente después de que las verificaciones correspondientes hayan finalizado correctamente.
+
+En los Pull Requests, el pipeline ejecuta las verificaciones y construye las imágenes, pero no las publica. La publicación se realiza solamente en los pushes a `main`, una vez superados los controles del componente.
+
+Esta decisión permite utilizar el registry como fuente de artefactos previamente verificados. Si se publicaran imágenes aunque fallaran los tests o la compilación, su presencia en el registry dejaría de representar que ese componente superó los controles de calidad.
+
+Cada job publica su imagen de manera independiente: el backend puede publicarse aunque falle el frontend. Sin embargo, el despliegue a QA requiere que ambos jobs terminen correctamente, evitando desplegar una versión de la aplicación con verificaciones fallidas.
+
+Las imágenes se identifican mediante el SHA del commit, lo que permite relacionarlas con el código que las generó.
+
+### 2. Continuous Delivery y Continuous Deployment
+
+Se implementó **Continuous Delivery**, ya que los cambios que superan las verificaciones se despliegan automáticamente a QA, pero requieren aprobación humana antes de llegar a producción.
+
+La diferencia con Continuous Deployment es que este último automatiza también el despliegue a PROD, sin una aprobación manual.
+
+Se eligió Continuous Delivery porque permite comprobar el funcionamiento de los cambios en QA antes de autorizar su llegada a producción. Esto resulta especialmente importante cuando existen modificaciones funcionales o migraciones de base de datos que requieren una revisión adicional.
+
+### 3. Diseño del pipeline y separación de entornos
+
+El pipeline ejecuta `build-backend` y `build-frontend` en paralelo. Mediante `needs`, `deploy-qa` espera que ambos finalicen correctamente, mientras que `deploy-prod` depende del éxito de `deploy-qa`.
+
+Las condiciones `if` restringen los despliegues a los pushes sobre `main`, evitando que un Pull Request despliegue cambios que todavía no fueron integrados.
+
+Se configuraron dos environments de GitHub:
+
+- `qa`: permite el despliegue automático.
+- `production`: exige aprobación manual mediante Required reviewers.
+
+Los secrets se separaron por entorno para evitar que un despliegue de QA utilice accidentalmente los hooks o servicios de producción. Cada environment contiene los hooks de sus servicios y la credencial de acceso a la API de Render; los identificadores de servicios se almacenan como variables porque no son información sensible.
+
+Los jobs de build utilizan `GITHUB_TOKEN` con permisos de publicación en GHCR, mientras que los jobs de despliegue solamente requieren lectura del repositorio y las credenciales correspondientes de Render.
+
+### 4. Criterios de aprobación de producción
+
+Antes de aprobar un despliegue a PROD, se decidió revisar que:
+
+- Los builds y tests hayan finalizado correctamente.
+- QA se haya desplegado y superado los smoke tests.
+- El commit corresponda al cambio que se desea promover.
+- El funcionamiento visible sea el esperado.
+- No existan riesgos de compatibilidad asociados a cambios de base de datos.
+
+Se demostró el funcionamiento del gate mediante un despliegue rechazado con motivo y otro aprobado. Para la aprobación se incorporó una etiqueta roja visible en ListaFácil, comprobando que primero aparecía en QA y que PROD solamente se actualizaba después de la autorización.
+
+Además, se incorporó una validación que compara el SHA de la corrida con el HEAD actual de `main` antes de ejecutar los hooks de PROD. Si no coinciden, el despliegue se detiene. Esto evita aprobar tardíamente una corrida antigua que podría reemplazar una versión más reciente.
+
+### 5. Limitaciones de Render Free
+
+Se eligió Render Free para realizar el despliegue sin costos de infraestructura, aceptando sus restricciones.
+
+Los servicios gratuitos pueden suspenderse después de 15 minutos sin tráfico, por lo que una nueva solicitud puede requerir un *cold start*. También existen límites de horas de ejecución y minutos de build, que pueden afectar la disponibilidad y los despliegues.
+
+Para contemplar estas demoras, el pipeline implementa reintentos y tiempos máximos de espera: hasta 20 minutos para confirmar los despliegues, 5 minutos para los smoke tests y 30 minutos como límite del job.
+
+Estos mecanismos permiten tolerar demoras transitorias, pero no solucionan cuotas agotadas ni errores permanentes. Por eso, el plan gratuito resulta adecuado para la demostración académica, pero no ofrece las garantías de disponibilidad necesarias para una producción real.
+
+### 6. Alcance y limitaciones de los smoke tests
+
+Se implementaron cuatro verificaciones posteriores al despliegue:
+
+1. El backend responde correctamente en `/health`.
+2. El frontend entrega el HTML de la aplicación.
+3. El endpoint de login devuelve el error esperado para un usuario inexistente, comprobando una consulta a PostgreSQL.
+4. La misma solicitud funciona a través del proxy Nginx del frontend.
+
+Se eligieron estos controles porque permiten detectar problemas básicos de disponibilidad, conexión a la base de datos y comunicación entre frontend y backend sin modificar información.
+
+Sin embargo, **un smoke test exitoso no garantiza que toda la aplicación funcione correctamente ni identifica por sí solo qué versión está ejecutándose**. Tampoco verifica todas las funcionalidades, permisos o escrituras.
+
+Por ese motivo, el pipeline complementa los smoke tests consultando la API de Render para comprobar que ambos servicios tengan estado `live` y correspondan al SHA solicitado. Esto verifica el commit desplegado, aunque no demuestra la identidad exacta de las imágenes construidas.
+
+### 7. Patrón de despliegue y reproducibilidad
+
+Se eligió el despliegue administrado por Render, que reemplaza las instancias de los servicios durante una actualización. No se implementó un mecanismo propio de blue-green o canary porque requeriría infraestructura y complejidad adicionales para el alcance del TP.
+
+Backend y frontend se despliegan como servicios independientes. Por lo tanto, una actualización podría completarse en uno y fallar en el otro, dejando temporalmente versiones diferentes. Esto hace necesario mantener compatibilidad entre componentes.
+
+Una limitación importante es que **Render reconstruye las imágenes Docker desde el repositorio**, utilizando el SHA indicado en el hook, en lugar de desplegar directamente las imágenes publicadas en GHCR.
+
+Esto permite identificar el código utilizado, pero se pierde la garantía de que QA y PROD ejecuten exactamente el mismo artefacto previamente verificado por CI. Para obtener esa garantía sería necesario promover una misma imagen preconstruida, idealmente identificada por su digest.
+
+El procedimiento de rollback y su duración se documentarán después de realizar la demostración correspondiente al punto 3.5.
+
+### 8. Problemas encontrados y soluciones
+
+**Error HTTP 400 al consultar la API de Render**
+
+Durante el primer despliegue automático a QA, el pipeline falló porque la API de Render devolvía HTTP 400 al consultar los despliegues. Como no estaba claro si el problema era la autenticación, el endpoint o alguno de los parámetros enviados, decidimos aislar la causa antes de modificar el script principal.
+
+Para ello, creamos temporalmente un workflow de diagnóstico en GitHub Actions que utilizaba las mismas credenciales de Render y ejecutaba tres consultas GET sobre los servicios de backend y frontend:
+
+- **Consulta A:** sin el parámetro `createdAfter`, para comprobar que el endpoint y la autenticación funcionaban.
+- **Consulta B:** con `createdAfter` expresado en UTC, con precisión de segundos y terminación `Z`.
+- **Consulta C:** con el formato original utilizado por nuestro script, que incluía microsegundos y `+00:00`.
+
+Las consultas A y B devolvieron HTTP 200, mientras que la C devolvió HTTP 400. Esta comparación permitió identificar que el problema estaba específicamente en el formato de fecha y no en las credenciales ni en el endpoint.
+
+Elegimos realizar el diagnóstico mediante consultas GET porque **solamente recuperaban información de los despliegues**: no ejecutaban hooks, no iniciaban nuevos despliegues y no modificaban los servicios ni las bases de datos. Además, al utilizar un workflow separado, pudimos probar distintas hipótesis sin alterar el pipeline principal.
+
+Una vez identificada la causa, corregimos el formato de fecha en el script para enviarla como `YYYY-MM-DDTHH:MM:SSZ`, agregamos una prueba de regresión y eliminamos el workflow temporal. Después verificamos que el despliegue a QA finalizara correctamente.
+
+**Aprobación manual de producción no aplicada en la primera ejecución**
+
+Durante la primera ejecución del despliegue a PROD, observamos que el job se ejecutó automáticamente, sin solicitar la aprobación manual que habíamos previsto.
+
+Al revisar la configuración del environment `production`, identificamos que habíamos seleccionado el reviewer requerido, pero olvidado guardar las protection rules mediante **Save protection rules**. Por lo tanto, GitHub todavía no estaba aplicando esa restricción.
+
+Guardamos correctamente la configuración y volvimos a ejecutar el workflow para verificarla. Esta vez, `deploy-prod` quedó detenido en **Waiting for review**, confirmando que la aprobación manual era obligatoria.
+
+Para demostrar el rechazo, seleccionamos **Reject** y justificamos que se trataba de una nueva ejecución de un commit que ya había sido desplegado exitosamente en producción. No existían cambios nuevos que justificaran repetir ese despliegue.
+
+Posteriormente, realizamos otro cambio visible en el frontend, incorporando la etiqueta roja `TP6 · Deploy PROD`. Después del merge comprobamos que la etiqueta aparecía automáticamente en QA, mientras que PROD conservaba la versión anterior. Recién después de aprobar manualmente el despliegue, la etiqueta apareció también en producción.
+
+De esta manera verificamos tanto el rechazo como la aprobación, y comprobamos que la configuración del environment efectivamente controla cuándo un cambio puede llegar a PROD.
+
+### 9. Uso de inteligencia artificial
+
+Se utilizaron ChatGPT y Codex como herramientas de apoyo para interpretar la consigna, analizar alternativas, implementar y depurar el pipeline, desarrollar pruebas y redactar la documentación.
+
+Las decisiones técnicas se revisaron en función de los requisitos del TP y se verificó su funcionamiento mediante las ejecuciones de GitHub Actions y las comprobaciones realizadas en QA y PROD.
