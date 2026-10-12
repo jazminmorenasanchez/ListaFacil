@@ -3,6 +3,8 @@
 body { margin: 0; min-width: 320px; }
 main { width: min(1000px, 92%); margin: 0 auto; padding: 24px 0 48px; }
 .narrow { max-width: 460px; }
+.deploy-notice { width: min(1000px, 92%); margin: 16px auto 0; }
+.deploy-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; background: #a63d40; color: #fff; font-size: .875rem; font-weight: 600; }
 header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 28px; border-bottom: 1px solid #ccd4d8; padding-bottom: 16px; }
 h1, h2, h3 { margin-top: 0; }
 nav, .tabs, .actions, .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
