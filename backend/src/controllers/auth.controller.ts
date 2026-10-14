@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import { AppError } from '../lib/app-error'
 import * as authService from '../services/auth.service'
+import { deleteOwnAccount } from '../services/account.service'
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' ? value : null
@@ -41,4 +42,14 @@ export async function login(request: Request, response: Response, next: NextFunc
 
 export function me(request: Request, response: Response): void {
   response.json({ user: request.authenticatedUser })
+}
+
+export async function removeAccount(request: Request, response: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!request.authenticatedUser) throw new AppError(401, 'Usuario no autenticado')
+    await deleteOwnAccount(request.authenticatedUser.id, request.body?.currentPassword)
+    response.status(204).send()
+  } catch (error) {
+    next(error)
+  }
 }
