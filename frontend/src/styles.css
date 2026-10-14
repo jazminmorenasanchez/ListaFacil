@@ -29,5 +29,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .message.error { background: #fbe9e9; border-color: #a63d40; }
 .message.success { background: #e8f5ea; border-color: #388444; }
 .urgent { color: #a63d40; font-weight: 600; }
+.account-deletion { margin-top: 24px; padding-top: 24px; border-top: 1px solid #ccd4d8; }
+.account-deletion-form { width: 100%; max-width: 540px; gap: 12px; }
+.account-deletion-form h3, .account-deletion-form p { margin: 0; }
+.account-deletion-form p { line-height: 1.45; }
+.account-deletion-form input { width: 100%; min-width: 0; }
+.account-deletion-info { display: grid; gap: 4px; padding: 10px 12px; background: #e7f1f5; border: 1px solid #d7dee2; border-radius: 4px; font-size: .9rem; }
 code { font-size: 1rem; }
 @media (max-width: 700px) { .columns { grid-template-columns: 1fr; } header, .list-row { align-items: flex-start; flex-direction: column; } }

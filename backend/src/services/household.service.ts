@@ -1,8 +1,9 @@
 import { randomInt } from 'node:crypto'
 import { DEFAULT_CATALOG_ITEMS } from '../data/default-catalog'
-import { Prisma, PurchaseStatus, UserRole } from '../generated/prisma/client'
+import { Prisma, UserRole } from '../generated/prisma/client'
 import { AppError } from '../lib/app-error'
 import { prisma } from '../lib/prisma'
+import { activePurchaseMessage, detachFromHousehold, householdTransaction } from '../lib/household-departure'
 
 const JOIN_CODE_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const JOIN_CODE_LENGTH = 6
@@ -46,12 +47,6 @@ async function getUserOrThrow(userId: string) {
   }
 
   return user
-}
-
-function activePurchaseMessage(status: PurchaseStatus): string {
-  return status === PurchaseStatus.SCHEDULED
-    ? 'El responsable debe liberar la compra programada antes de salir del hogar'
-    : 'El responsable debe finalizar la compra en curso antes de salir del hogar'
 }
 
 export async function createHousehold(userId: string, requestedName: string) {
@@ -192,56 +187,11 @@ export async function getHouseholdMembers(userId: string) {
 }
 
 export async function leaveHousehold(userId: string): Promise<void> {
-  await prisma.$transaction(async (transaction) => {
+  await householdTransaction(async (transaction) => {
     const user = await transaction.user.findUnique({ where: { id: userId } })
-
-    if (!user) {
-      throw new AppError(401, 'Usuario no autenticado')
-    }
-
-    if (!user.householdId) {
-      throw new AppError(409, 'El usuario no pertenece a un hogar')
-    }
-
-    const purchase = await transaction.purchase.findUnique({ where: { householdId: user.householdId } })
-
-    if (purchase?.responsibleUserId === user.id) {
-      throw new AppError(409, activePurchaseMessage(purchase.status))
-    }
-
-    if (user.role === UserRole.ADMIN) {
-      const nextAdmin = await transaction.user.findFirst({
-        where: { householdId: user.householdId, id: { not: user.id } },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      })
-
-      if (nextAdmin) {
-        await transaction.user.update({ where: { id: nextAdmin.id }, data: { role: UserRole.ADMIN } })
-        await transaction.user.update({
-          where: { id: user.id },
-          data: { householdId: null, role: UserRole.MEMBER },
-        })
-        return
-      }
-
-      await transaction.user.update({
-        where: { id: user.id },
-        data: { householdId: null, role: UserRole.MEMBER },
-      })
-
-      await transaction.shoppingListItem.deleteMany({
-        where: { catalogItem: { householdId: user.householdId } },
-      })
-      await transaction.catalogItem.deleteMany({ where: { householdId: user.householdId } })
-      await transaction.purchase.deleteMany({ where: { householdId: user.householdId } })
-      await transaction.household.delete({ where: { id: user.householdId } })
-      return
-    }
-
-    await transaction.user.update({
-      where: { id: user.id },
-      data: { householdId: null, role: UserRole.MEMBER },
-    })
+    if (!user) throw new AppError(401, 'Usuario no autenticado')
+    if (!user.householdId) throw new AppError(409, 'El usuario no pertenece a un hogar')
+    await detachFromHousehold(transaction, user)
   })
 }
 
