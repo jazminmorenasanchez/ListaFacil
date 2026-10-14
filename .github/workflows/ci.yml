@@ -219,6 +219,9 @@ jobs:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     environment: qa
+    outputs:
+      backend_image_sha: ${{ steps.deploy.outputs.backend_image_sha }}
+      frontend_image_sha: ${{ steps.deploy.outputs.frontend_image_sha }}
     permissions:
       contents: read
     timeout-minutes: 30
@@ -229,7 +232,8 @@ jobs:
       - name: Bajar el código al runner
         uses: actions/checkout@v6
 
-      - name: Desplegar el commit en QA y verificar smoke tests
+      - name: Desplegar las imágenes en QA y verificar smoke tests
+        id: deploy
         env:
           RENDER_HOOK_API_QA: ${{ secrets.RENDER_HOOK_API_QA }}
           RENDER_HOOK_FRONT_QA: ${{ secrets.RENDER_HOOK_FRONT_QA }}
@@ -255,11 +259,13 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Desplegar el commit aprobado en PROD y verificar smoke tests
+      - name: Desplegar las imágenes aprobadas en PROD y verificar smoke tests
         env:
           RENDER_HOOK_API_PROD: ${{ secrets.RENDER_HOOK_API_PROD }}
           RENDER_HOOK_FRONT_PROD: ${{ secrets.RENDER_HOOK_FRONT_PROD }}
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_API_PROD: ${{ vars.RENDER_SERVICE_API_PROD }}
           RENDER_SERVICE_FRONT_PROD: ${{ vars.RENDER_SERVICE_FRONT_PROD }}
+          QA_BACKEND_IMAGE_SHA: ${{ needs.deploy-qa.outputs.backend_image_sha }}
+          QA_FRONTEND_IMAGE_SHA: ${{ needs.deploy-qa.outputs.frontend_image_sha }}
         run: python3 .github/scripts/deploy-qa.py --environment production

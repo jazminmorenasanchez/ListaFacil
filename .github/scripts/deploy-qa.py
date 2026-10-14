@@ -1,4 +1,4 @@
-"""Deploy the tested Git commit to QA or production, then run read-only smoke checks.
+"""Deploy the published SHA-tagged images to QA or production, then run smoke checks.
 
 Only Python's standard library is needed on the GitHub runner.
 """
@@ -6,12 +6,13 @@ Only Python's standard library is needed on the GitHub runner.
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 
@@ -25,6 +26,20 @@ ENVIRONMENTS = {
                    "frontend": "https://listafacil-web-prod.onrender.com"},
 }
 TERMINAL = {"build_failed", "update_failed", "pre_deploy_failed", "canceled", "deactivated"}
+
+
+def image_urls(sha):
+    return {name: f"ghcr.io/jazminmorenasanchez/listafacil-{name}:sha-{sha}"
+            for name in ("backend", "frontend")}
+
+
+def image_hook_url(hook, image):
+    parts = urlsplit(hook)
+    # Preserve the hook key, replacing any stale Git/image selector.
+    params = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+              if key not in ("ref", "imgURL")]
+    params.append(("imgURL", image))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), ""))
 
 
 def request(url, method="GET", data=None, token=None, timeout=60):
@@ -76,12 +91,12 @@ def list_deploys(service, token, deadline, created_after=None):
         params["cursor"] = cursor
 
 
-def start_deploy(service, hook, token, deadline):
+def start_deploy(service, hook, token, deadline, image):
     # Exclude existing deploy IDs as well as old creation times: a previous
     # deployment of the same SHA must never satisfy this run.
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
     previous = {deploy["id"] for deploy in list_deploys(service, token, deadline, cutoff)}
-    status, body = request(f"{hook}&ref={os.environ['GITHUB_SHA']}", method="POST")
+    status, body = request(image_hook_url(hook, image), method="POST")
     if status not in (200, 202):
         raise RuntimeError(f"Deploy hook failed: HTTP {status}; not retried to avoid duplicate deploys")
     try:
@@ -95,6 +110,7 @@ def start_deploy(service, hook, token, deadline):
 
 
 def wait_live(deployments, sha, token, deadline, label="QA"):
+    images = image_urls(sha)
     while time.monotonic() < deadline:
         all_live = True
         for name, deployment in deployments.items():
@@ -102,7 +118,7 @@ def wait_live(deployments, sha, token, deadline, label="QA"):
             if not deployment["id"]:
                 candidates = [deploy for deploy in list_deploys(service, token, deadline, deployment["cutoff"])
                               if deploy["id"] not in deployment["previous"]
-                              and deploy.get("commit", {}).get("id") == sha
+                              and (deploy.get("image") or {}).get("ref") == images[name]
                               and deploy.get("trigger") == "deploy_hook"]
                 if len(candidates) > 1:
                     raise RuntimeError(f"{name}: ambiguous new deployments; refusing to guess")
@@ -111,12 +127,21 @@ def wait_live(deployments, sha, token, deadline, label="QA"):
                     continue
                 deployment["id"] = candidates[0]["id"]
             deploy = api_get(f"/services/{service}/deploys/{deployment['id']}", token, deadline)
-            if deploy.get("commit", {}).get("id") != sha:
-                raise RuntimeError(f"{name}: deployed commit does not match GITHUB_SHA")
             status = deploy.get("status")
             print(f"{label} {name}: {deployment['id']} — {status}", flush=True)
             if status in TERMINAL:
                 raise RuntimeError(f"{name}: deployment ended with {status}")
+            image = deploy.get("image") or {}
+            if image.get("ref") != images[name]:
+                raise RuntimeError(f"{name}: deployed image.ref does not match the expected SHA-tagged image")
+            if status == "live":
+                digest = image.get("sha")
+                if not isinstance(digest, str) or not re.fullmatch(r"(?:sha256:)?[0-9a-fA-F]{64}", digest):
+                    raise RuntimeError(f"{name}: live deployment has no image.sha; cannot verify image identity")
+                expected = deployment.get("image_sha")
+                if expected and digest != expected:
+                    raise RuntimeError(f"{name}: image digest differs from the verified QA image")
+                deployment["image_sha"] = digest
             all_live = all_live and status == "live"
         if all_live:
             return
@@ -181,9 +206,15 @@ def main(environment="qa"):
     suffix, label = config["suffix"], config["label"]
     required = ["GITHUB_SHA", "RENDER_API_KEY", f"RENDER_HOOK_API_{suffix}", f"RENDER_HOOK_FRONT_{suffix}",
                 f"RENDER_SERVICE_API_{suffix}", f"RENDER_SERVICE_FRONT_{suffix}"]
+    if environment == "production":
+        required.extend(["QA_BACKEND_IMAGE_SHA", "QA_FRONTEND_IMAGE_SHA"])
     for name in required:
         if not os.environ.get(name, "").strip():
             raise RuntimeError(f"Missing required environment variable: {name}")
+    if environment == "production":
+        for name in ("QA_BACKEND_IMAGE_SHA", "QA_FRONTEND_IMAGE_SHA"):
+            if not re.fullmatch(r"(?:sha256:)?[0-9a-fA-F]{64}", os.environ[name]):
+                raise RuntimeError(f"Invalid verified QA image SHA: {name}")
     for name in (f"RENDER_HOOK_API_{suffix}", f"RENDER_HOOK_FRONT_{suffix}"):
         url = urlsplit(os.environ[name])
         if url.scheme != "https" or url.hostname != "api.render.com" or not url.query:
@@ -193,19 +224,26 @@ def main(environment="qa"):
     token = os.environ["RENDER_API_KEY"]
     deadline = time.monotonic() + 20 * 60
     deployments = {}
+    images = image_urls(os.environ["GITHUB_SHA"])
     for name, service in (("backend", "API"), ("frontend", "FRONT")):
         deployments[name] = start_deploy(os.environ[f"RENDER_SERVICE_{service}_{suffix}"],
-                                         os.environ[f"RENDER_HOOK_{service}_{suffix}"], token, deadline)
+                                         os.environ[f"RENDER_HOOK_{service}_{suffix}"], token, deadline, images[name])
+        if environment == "production":
+            deployments[name]["image_sha"] = os.environ[f"QA_{name.upper()}_IMAGE_SHA"]
     wait_live(deployments, os.environ["GITHUB_SHA"], token, deadline, label)
     smoke(time.monotonic() + 5 * 60, environment)
     # Recheck both deployment IDs after smoke, detecting superseded deploys.
     wait_live(deployments, os.environ["GITHUB_SHA"], token, time.monotonic() + 60, label)
+    if environment == "qa" and os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            for name, deployment in deployments.items():
+                output.write(f"{name}_image_sha={deployment['image_sha']}\n")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as output:
             output.write(f"### {label} deploy verified\n\nCommit: `{os.environ['GITHUB_SHA']}`\n\n")
             for name, deployment in deployments.items():
-                output.write(f"- {name}: `{deployment['id']}` — live\n")
+                output.write(f"- {name}: `{deployment['id']}` — live; `{images[name]}`; image SHA `{deployment['image_sha']}`\n")
             output.write("\nAll four read-only smoke checks passed.\n")
 
 
