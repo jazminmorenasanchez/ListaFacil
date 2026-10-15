@@ -5,6 +5,8 @@ backend/src/generated/prisma/
 dist/
 build/
 coverage/
+playwright-report/
+test-results/
 
 # Environment files (keep examples)
 .env
