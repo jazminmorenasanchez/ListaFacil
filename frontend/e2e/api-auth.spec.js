@@ -1,16 +1,12 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { test, expect, request } from '@playwright/test'
+import { requireLocalURL } from './support/account.js'
 
 class CleanupError extends Error {}
 
 test('API: registra, autentica, consulta y elimina exclusivamente su propia cuenta', async ({}, testInfo) => {
   const baseURL = process.env.API_BASE_URL ?? 'http://localhost:8080'
-  const url = new URL(baseURL)
-  if (!['http:', 'https:'].includes(url.protocol)
-      || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-      || url.username || url.password) {
-    throw new Error('Esta prueba API sólo admite destinos locales; QA y PROD no están permitidos.')
-  }
+  requireLocalURL(baseURL)
   const id = randomUUID()
   const name = `Cuenta API TP7 ${id.slice(0, 8)}`
   const credentials = { email: `tp7-api-${id}@example.invalid`, password: randomBytes(24).toString('base64url') }

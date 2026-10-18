@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
 
+# Reserva QA durante toda la corrida, incluida la espera de aprobación de PROD.
+# Los PR usan grupos independientes y no bloquean la secuencia de main.
+concurrency:
+  group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'listafacil-main-promotion' || format('listafacil-ci-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   build-backend:
     runs-on: ubuntu-latest
@@ -242,8 +248,90 @@ jobs:
           RENDER_SERVICE_FRONT_QA: ${{ vars.RENDER_SERVICE_FRONT_QA }}
         run: python3 .github/scripts/deploy-qa.py
 
-  deploy-prod:
+  integracion:
     needs: deploy-qa
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      API_BASE_URL: https://listafacil-api-qa.onrender.com
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar exclusivamente las tres pruebas API contra QA
+        run: npx playwright test '(^|/)api-(auth|catalog-shopping-list|partial-purchase)\.spec\.js$' --workers=1 --forbid-only
+
+      - name: Publicar evidencias de integración
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: integracion-playwright
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: warn
+
+  e2e:
+    needs: integracion
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      API_BASE_URL: https://listafacil-api-qa.onrender.com
+      E2E_BASE_URL: https://listafacil-web-qa.onrender.com
+    steps:
+      - name: Bajar el código al runner
+        uses: actions/checkout@v6
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Chromium y sus dependencias
+        run: npx playwright install --with-deps chromium
+
+      - name: Ejecutar exclusivamente las tres pruebas de navegador contra QA
+        run: npx playwright test '(^|/)(registration-household|catalog-shopping-list|partial-purchase)\.spec\.js$' --workers=1 --forbid-only
+
+      - name: Publicar evidencias E2E
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-playwright
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: warn
+
+  deploy-prod:
+    needs: [deploy-qa, e2e]
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     environment: production

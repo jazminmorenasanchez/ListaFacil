@@ -1,12 +1,19 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { test as base, expect } from '@playwright/test'
 
-function requireLocalURL(value) {
+function requireLocalURL(value, role = 'api') {
+  const qaOrigins = {
+    api: 'https://listafacil-api-qa.onrender.com',
+    frontend: 'https://listafacil-web-qa.onrender.com',
+  }
   const url = new URL(value)
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  const isQA = url.origin === qaOrigins[role]
   if (!['http:', 'https:'].includes(url.protocol)
-      || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      || !Object.hasOwn(qaOrigins, role)
+      || (!isLocal && !isQA)
       || url.username || url.password) {
-    throw new Error('Este E2E sólo admite servicios locales; no se ejecutará contra QA ni PROD.')
+    throw new Error(`Destino ${role} no permitido: sólo se admiten servicios locales o el origen QA correspondiente; PROD y otros destinos remotos están bloqueados.`)
   }
 }
 
@@ -78,7 +85,7 @@ async function cleanupAccount(api, account) {
 export const test = base.extend({
   account: [async ({ playwright, baseURL }, use) => {
     const apiURL = process.env.API_BASE_URL ?? 'http://localhost:8080'
-    requireLocalURL(baseURL)
+    requireLocalURL(baseURL, 'frontend')
     requireLocalURL(apiURL)
     const account = createTestAccount()
     const api = await playwright.request.newContext({ baseURL: apiURL, timeout: 5000, maxRedirects: 0 })
