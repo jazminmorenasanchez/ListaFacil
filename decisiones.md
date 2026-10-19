@@ -8,6 +8,7 @@
 - [TP4 - CI: Pipelines as Code](#tp4---ci-pipelines-as-code)
 - [TP5 - Tests y cobertura como requisito de merge](#tp5---tests-y-cobertura-como-requisito-de-merge)
 - [TP6 — Continuous Delivery](#tp6--continuous-delivery)
+- [TP7 — CI/CD con imágenes y pruebas automatizadas](#tp7--cicd-con-imágenes-y-pruebas-automatizadas)
 
 
 ## TP1 - Git colaborativo
@@ -621,3 +622,161 @@ De esta manera verificamos tanto el rechazo como la aprobación, y comprobamos q
 Se utilizaron ChatGPT y Codex como herramientas de apoyo para interpretar la consigna, analizar alternativas, implementar y depurar el pipeline, desarrollar pruebas y redactar la documentación.
 
 Las decisiones técnicas se revisaron en función de los requisitos del TP y se verificó su funcionamiento mediante las ejecuciones de GitHub Actions y las comprobaciones realizadas en QA y PROD.
+
+# TP7 — CI/CD con imágenes y pruebas automatizadas
+## Enlaces del TP7
+
+### Paquetes públicos en GHCR
+
+- **Backend:** https://github.com/jazminmorenasanchez/ListaFacil/pkgs/container/listafacil-backend
+- **Frontend:** https://github.com/jazminmorenasanchez/ListaFacil/pkgs/container/listafacil-frontend
+- **Etiqueta de ambas imágenes de la corrida verde:** `sha-1897aa43426e7f54f2113ebe18e44a4b2e69be59`
+
+### Corridas y evidencias
+
+**Demostración del gate E2E:**
+
+- Commit que introdujo el error: `c89c0fc356e6d8ff3f61d51294efd36abfa2d7ef` [merge del PR #46](https://github.com/jazminmorenasanchez/ListaFacil/pull/46).
+- Corrida con integración verde, E2E roja y PROD bloqueado: https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/39157198760
+- Reporte de integración verde: artefacto `integracion-playwright` de esa corrida.
+- Reporte E2E rojo: artefacto `e2e-playwright` de la misma corrida, con el reporte HTML y la traza del error.
+
+**Corrección y promoción:**
+
+- Corrida completamente verde, incluido el despliegue a PROD: https://github.com/jazminmorenasanchez/ListaFacil/actions/runs/39159605407
+
+### Entornos
+
+- **Frontend QA:** https://listafacil-web-qa.onrender.com
+- **Backend QA:** https://listafacil-api-qa.onrender.com
+- **Frontend PROD:** https://listafacil-web-prod.onrender.com
+- **Backend PROD:** https://listafacil-api-prod.onrender.com
+
+---
+
+## 1. Construcción y promoción de imágenes
+
+**Decisión:** decidí construir las imágenes del backend y frontend una sola vez en GitHub Actions, publicarlas en GHCR y utilizar esas mismas imágenes para QA y PROD.
+
+**Justificación:** en el TP6, Render reconstruía la aplicación desde Git para cada entorno. Esto podía generar diferencias entre lo probado en QA y lo desplegado en PROD. En el TP7, en cambio, verifico las imágenes en QA y promuevo esas mismas imágenes a producción, sin reconstruirlas (*build once, deploy many*).
+
+Esta construcción única se refiere a las imágenes publicadas que se promueven entre entornos. El pipeline también construye imágenes específicas para ejecutar los tests.
+
+Cada imagen se publica con la etiqueta `sha-<commit>`, que permite identificar el commit del que proviene. Decidí no utilizar `latest` porque puede cambiar y no permite identificar claramente una versión específica.
+
+**Servicios de Render:** reutilicé los cuatro servicios de QA y PROD que ya tenía desde el TP6. Cambié su configuración para que utilizaran imágenes de GHCR en lugar de construir desde Git. Así conservé las URLs existentes y evité mantener servicios duplicados.
+
+La imagen configurada inicialmente en Render sirve como referencia de partida, pero no determina qué versión se ejecuta después de cada despliegue. El pipeline utiliza Deploy Hooks con `imgURL` para indicar qué imagen debe ejecutar cada servicio.
+
+## 2. Etiquetas, release y verificación de imágenes
+
+**Decisión:** decidí utilizar `sha-<commit>` para identificar las imágenes en GHCR y `v7.0.0` como nombre de la versión del TP7 en Git.
+
+**Justificación:** la etiqueta SHA permite relacionar una imagen con el código utilizado para construirla. La release identifica una versión que efectivamente llegó a producción.
+
+A partir del tag `v7.0.0` puedo obtener el commit y buscar las imágenes de backend y frontend con la etiqueta `sha-<commit>`.
+
+El tag de la imagen puede volver a publicarse, por lo que no garantiza que su contenido permanezca siempre igual. El digest `sha256`, en cambio, identifica el contenido exacto de la imagen.
+
+**Verificación:** el smoke comprueba que el servicio responde correctamente, pero no demuestra qué imagen está ejecutando. Por eso, configuré el pipeline para verificar también la referencia de imagen y su digest. En la defensa puedo mostrar los eventos de Render donde figura el despliegue mediante Deploy Hook.
+
+El job de QA exporta los digests verificados de ambas imágenes. El job de PROD recibe esos valores y comprueba que los digests desplegados coincidan con los aprobados en QA. Además, antes de iniciar los despliegues de PROD, el script verifica que el SHA de la corrida siga siendo el HEAD de `main`, para evitar promover una corrida antigua.
+
+## 3. Configuración del frontend para QA y PROD
+
+**Decisión:** decidí utilizar la misma imagen del frontend en ambos entornos, configurando la dirección del backend al iniciar el contenedor.
+
+**Justificación:** si incorporaba la URL de cada backend durante la construcción, necesitaba imágenes diferentes para QA y PROD.
+
+Para ello, reutilicé la configuración de Nginx incorporada en el TP6, que utiliza la variable `BACKEND_URL` para dirigir las solicitudes al backend correspondiente al iniciar el contenedor. De esta manera, mantengo una sola imagen y modifico únicamente la configuración de cada entorno.
+
+## 4. Estrategia de pruebas
+
+**Decisión:** implementé tres pruebas de integración API y tres pruebas E2E con Playwright.
+
+| Integración API | E2E |
+|---|---|
+| Registro, autenticación y sesión | Registro y creación de un hogar desde la interfaz |
+| Catálogo, cantidades y urgencia | Agregar productos desde el catálogo y modificar la lista |
+| Compra parcial y unidades pendientes | Realizar una compra parcial desde la interfaz |
+
+Elegí estos recorridos porque representan funcionalidades importantes de ListaFácil: el acceso a la aplicación, la organización de la lista y la realización de compras.
+
+**Justificación:** las pruebas de integración comprueban las reglas y respuestas del backend sin utilizar el navegador. Las E2E verifican que esos recorridos puedan completarse desde la interfaz.
+
+Decidí no incluir todas las validaciones en ambas suites. Las comprobaciones más específicas quedan principalmente en pruebas unitarias y de backend, mientras que las E2E se concentran en recorridos importantes. Esto sigue la idea de la pirámide de pruebas: tener más verificaciones rápidas y menos pruebas completas de navegador.
+
+Las pruebas utilizan el backend y PostgreSQL reales, sin reemplazarlos por mocks. Configuré cada prueba para que cree datos propios y realice una limpieza posterior, con el objetivo de reducir interferencias.
+
+## 5. Integración amplia y protección de PROD
+
+**Decisión:** elegí ejecutar las pruebas de integración contra la API ya desplegada en QA, en lugar de iniciar una API temporal dentro del job.
+
+**Justificación:** esta integración amplia me permite comprobar el comportamiento del servicio realmente desplegado, incluyendo su conexión con la base de datos. Como desventaja, dependo de la disponibilidad y velocidad del entorno remoto.
+
+También incorporé una validación de URLs para que las pruebas solamente puedan ejecutarse contra servicios locales o QA.
+
+La validación distingue el destino según su función: acepta únicamente el backend QA para las llamadas API y el frontend QA para el navegador. Rechaza PROD, otros destinos remotos y las URLs de QA intercambiadas.
+
+Esto es importante porque las pruebas crean y eliminan información. Si configurara accidentalmente una URL de PROD, la ejecución se rechazaría antes de modificar datos de producción.
+
+## 6. Pipeline y gate de promoción
+
+**Decisión:** organicé el pipeline de la siguiente manera:
+
+`Build → Deploy QA + smoke → Integración → E2E → Aprobación PROD → Deploy PROD`
+
+**Justificación:** primero compruebo que la aplicación pueda construirse y que los servicios respondan. Después verifico el backend mediante integración y, finalmente, los recorridos completos mediante E2E.
+
+Utilicé `needs` para establecer estas dependencias. Si integración falla, E2E no se ejecuta; si E2E falla, PROD queda bloqueado.
+
+Además, mantuve la aprobación manual para desplegar a producción. Por eso, mi estrategia corresponde a *Continuous Delivery*: el pipeline prepara y verifica la versión, pero yo autorizo su publicación.
+
+## 7. Cold start y concurrencia
+
+**Decisión:** configuré timeouts y un reintento en Playwright para contemplar las demoras ocasionales del entorno gratuito de Render.
+
+**Justificación:** después de un período de inactividad, los servicios pueden tardar en responder. Un test *flaky* es una prueba que a veces pasa y otras falla sin que haya cambiado el código. Los reintentos ayudan frente a demoras puntuales, aunque no eliminan todas las posibles causas de inestabilidad.
+
+Una prueba que falla inicialmente y pasa en el reintento puede dejar el job verde; por eso, también conviene revisar los casos inestables del reporte.
+
+También configuré concurrencia a nivel workflow para evitar que dos corridas de `main` utilicen QA simultáneamente. Los pushes a `main` comparten un grupo con `cancel-in-progress: false`, mientras que los Pull Requests utilizan grupos independientes.
+
+Esto es importante porque QA es un entorno compartido: si una corrida desplegara una versión nueva mientras otra está probando, los resultados podrían ser incorrectos.
+
+Como limitación, una corrida puede quedar esperando mientras otra aguarda aprobación de PROD. Esta protección tampoco controla despliegues manuales externos al workflow.
+
+Además, `cancel-in-progress: false` protege la corrida activa, pero no garantiza conservar todas las pendientes: al no configurar `queue: max`, una nueva corrida puede reemplazar a otra que esté esperando en la cola de concurrencia.
+
+## 8. Problemas encontrados y soluciones
+
+**1. Cambiar el mecanismo de despliegue del TP6**
+
+En el TP6, Render reconstruía la aplicación desde Git. Para el TP7 necesitaba desplegar imágenes previamente construidas y verificadas.
+
+**Solución:** reutilicé los servicios existentes, los configuré para consumir imágenes de GHCR y adapté el pipeline para enviar `imgURL` mediante los Deploy Hooks. También incorporé la verificación de referencia y digest de imagen.
+
+**2. Utilizar el mismo frontend en QA y PROD**
+
+Necesitaba que el frontend se conectara al backend correspondiente sin construir una imagen diferente para cada entorno.
+
+**Solución:** reutilicé la configuración de Nginx del TP6 con `BACKEND_URL` al iniciar el contenedor, separando la imagen de la configuración del entorno.
+
+**3. Evitar interferencias entre las pruebas**
+
+Las pruebas crean usuarios, hogares, productos y compras. Reutilizar los mismos datos podía provocar interferencias entre ejecuciones.
+
+**Solución:** generé datos únicos para cada prueba, incorporé limpieza posterior y configuré las suites para ejecutarse con un solo worker.
+
+
+## 9. Limitaciones
+
+Las seis pruebas automatizadas cubren recorridos importantes, pero no todas las funcionalidades ni todos los navegadores. Además, dependo de la disponibilidad de QA y de que la limpieza de los datos de prueba se complete correctamente.
+
+Aunque promuevo las mismas imágenes, frontend y backend se despliegan como servicios separados. También debo considerar que revertir una imagen no revierte automáticamente los cambios realizados en la base de datos.
+
+## 10. Uso de inteligencia artificial
+
+Utilicé ChatGPT y Codex como apoyo para analizar los requisitos, implementar y revisar configuraciones, preparar pruebas automatizadas, interpretar errores y redactar la documentación.
+
+Adapté las decisiones a ListaFácil y a los requisitos del TP7. Verifiqué su funcionamiento mediante pruebas locales, GitHub Actions, reportes de Playwright y despliegues en QA y PROD.
