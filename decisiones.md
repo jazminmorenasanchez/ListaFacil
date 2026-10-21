@@ -9,6 +9,7 @@
 - [TP5 - Tests y cobertura como requisito de merge](#tp5---tests-y-cobertura-como-requisito-de-merge)
 - [TP6 — Continuous Delivery](#tp6--continuous-delivery)
 - [TP7 — CI/CD con imágenes y pruebas automatizadas](#tp7--cicd-con-imágenes-y-pruebas-automatizadas)
+- [TP8 — Infraestructura como Código](#tp8--infraestructura-como-código)
 
 
 ## TP1 - Git colaborativo
@@ -780,3 +781,26 @@ Aunque promuevo las mismas imágenes, frontend y backend se despliegan como serv
 Utilicé ChatGPT y Codex como apoyo para analizar los requisitos, implementar y revisar configuraciones, preparar pruebas automatizadas, interpretar errores y redactar la documentación.
 
 Adapté las decisiones a ListaFácil y a los requisitos del TP7. Verifiqué su funcionamiento mediante pruebas locales, GitHub Actions, reportes de Playwright y despliegues en QA y PROD.
+
+## TP8 — Infraestructura como Código
+
+### Riel elegido y versiones
+
+Elegí el riel **Neon + Render con Terraform**, ya que son las plataformas que venía utilizando para desplegar ListaFácil en los trabajos anteriores. Esto me permitió reutilizar las imágenes publicadas en GHCR y crear un entorno de preproducción sin modificar los servicios existentes de QA y producción.
+
+Utilicé **Terraform 1.16.6** y fijé las siguientes versiones de los providers:
+
+- **Neon:** `kislerdm/neon` versión `0.18.0`.
+- **Render:** `render-oss/render` versión `1.9.1`.
+
+Decidí mantener las versiones fijas para evitar cambios inesperados en el comportamiento de los providers. Además, configuré las conexiones entre los recursos mediante referencias de Terraform, de manera que el entorno pueda destruirse y reconstruirse sin tener que copiar manualmente las direcciones o credenciales.
+
+### Problemas encontrados y soluciones
+
+**1. Identificador de organización en Neon**
+
+Al ejecutar el primer `terraform apply`, recibí un error porque el provider de Neon requería el atributo `org_id` para crear el proyecto. Resolví el problema identificando mi organización en Neon e incorporando ese atributo al recurso `neon_project.preprod`. Después de esta corrección, Terraform pudo crear los recursos correctamente.
+
+### Declaración de uso de IA
+
+Utilicé **ChatGPT y Codex** como herramientas de apoyo para interpretar la consigna, adaptar la configuración de Terraform a ListaFácil y generar los archivos de infraestructura. Revisé los cambios propuestos mediante el diff de Git, ejecuté personalmente los comandos de Terraform y comprobé el funcionamiento del entorno de preproducción. También verifiqué el rechazo del plan destructivo durante el experimento con `prevent_destroy`. No incorporé las propuestas de la IA sin revisarlas: las decisiones y verificaciones finales quedaron bajo mi responsabilidad.
