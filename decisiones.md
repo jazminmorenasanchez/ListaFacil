@@ -782,9 +782,9 @@ Utilicé ChatGPT y Codex como apoyo para analizar los requisitos, implementar y 
 
 Adapté las decisiones a ListaFácil y a los requisitos del TP7. Verifiqué su funcionamiento mediante pruebas locales, GitHub Actions, reportes de Playwright y despliegues en QA y PROD.
 
-## TP8 — Infraestructura como Código
+# TP8 — Infraestructura como Código
 
-### Riel elegido y versiones
+## Riel elegido y versiones
 
 Elegí el riel **Neon + Render con Terraform**, ya que son las plataformas que venía utilizando para desplegar ListaFácil en los trabajos anteriores. Esto me permitió reutilizar las imágenes publicadas en GHCR y crear un entorno de preproducción sin modificar los servicios existentes de QA y producción.
 
@@ -795,12 +795,57 @@ Utilicé **Terraform 1.16.6** y fijé las siguientes versiones de los providers:
 
 Decidí mantener las versiones fijas para evitar cambios inesperados en el comportamiento de los providers. Además, configuré las conexiones entre los recursos mediante referencias de Terraform, de manera que el entorno pueda destruirse y reconstruirse sin tener que copiar manualmente las direcciones o credenciales.
 
-### Problemas encontrados y soluciones
+## Problemas encontrados y soluciones
 
 **1. Identificador de organización en Neon**
 
 Al ejecutar el primer `terraform apply`, recibí un error porque el provider de Neon requería el atributo `org_id` para crear el proyecto. Resolví el problema identificando mi organización en Neon e incorporando ese atributo al recurso `neon_project.preprod`. Después de esta corrección, Terraform pudo crear los recursos correctamente.
 
-### Declaración de uso de IA
+## Declaración de uso de IA
 
 Utilicé **ChatGPT y Codex** como herramientas de apoyo para interpretar la consigna, adaptar la configuración de Terraform a ListaFácil y generar los archivos de infraestructura. Revisé los cambios propuestos mediante el diff de Git, ejecuté personalmente los comandos de Terraform y comprobé el funcionamiento del entorno de preproducción. También verifiqué el rechazo del plan destructivo durante el experimento con `prevent_destroy`. No incorporé las propuestas de la IA sin revisarlas: las decisiones y verificaciones finales quedaron bajo mi responsabilidad.
+
+# TP9 
+## Problemas encontrados y soluciones
+
+**1. Problema al actualizar un PR de Dependabot**
+
+Al comenzar el TP9, activé **Dependabot alerts** y **Dependabot security updates** desde la configuración de GitHub, mientras preparaba el archivo `.github/dependabot.yml` en una rama nueva.
+
+Lo que no tuve en cuenta fue que, al activar estas opciones, Dependabot podía comenzar a generar PRs de seguridad incluso antes de que integrara el archivo de configuración en `main`. Por eso, algunos PRs se crearon antes de que terminara de configurar Dependabot y otros aparecieron después.
+
+Para cumplir con la consigna, elegí inicialmente el **PR #52**, que proponía actualizar `proxy-addr` de `2.0.7` a `2.0.8` para corregir una vulnerabilidad crítica. Revisé sus notas de versión, confirmé que era una actualización PATCH y comprobé que los checks ejecutados estaban verdes.
+
+Sin embargo, cuando intenté actualizar la rama del PR mediante `@dependabot rebase`, Dependabot respondió que la entrada de configuración que había creado ese PR ya no existía.
+
+En un principio pensé que podía estar relacionado con las ramas que había utilizado y eliminado al finalizar trabajos anteriores. Para entender qué había pasado, investigué el problema con ayuda de Codex y revisé el historial de `.github/dependabot.yml`, las fechas de creación de los PRs y el estado de sus ramas.
+
+Así comprobé que la configuración del backend seguía correctamente definida y que el PR #52 se había creado antes de integrar `dependabot.yml` en `main`. Por lo tanto, la causa más probable era que había quedado asociado a la configuración automática anterior, y no a una eliminación del archivo.
+
+Seguí la indicación de Dependabot y cerré el PR #52. Después revisé los demás PRs para asegurarme de que el problema no afectara a todos.
+
+Durante esa revisión descubrí que el **PR #63**, generado automáticamente para actualizar Express de `5.2.1` a `5.3.0`, también incluía la corrección de `proxy-addr` a `2.0.8` y actualizaciones de seguridad en `qs`.
+
+Esto me permitió resolver la vulnerabilidad sin tener que crear un PR manual. Antes de integrarlo, revisé el changelog de Express, sus posibles cambios de comportamiento y los resultados del CI. Finalmente, hice merge del PR #63.
+
+**2. Despliegue a producción bloqueado por un commit desactualizado**
+
+Mientras estaba investigando y resolviendo el problema con los PRs de Dependabot, me concentré en el PR #63 y olvidé que todavía tenía pendiente la aprobación manual del despliegue a producción del **workflow #89**, correspondiente al PR #54, con el que había incorporado la configuración de Dependabot.
+
+Ese workflow ya había completado correctamente los builds, el despliegue a QA, las pruebas de integración y las E2E, pero estaba esperando mi autorización para continuar hacia PROD.
+
+Cuando me acordé, el PR #63 ya estaba integrado en `main`. Intenté aprobar igualmente el despliegue del workflow #89 para completar primero esa ejecución y después desplegar la versión más reciente.
+
+Sin embargo, el job `deploy-prod` falló con el siguiente mensaje:
+
+`PROD: obsolete run; approved GITHUB_SHA is no longer HEAD of origin/main; no deployment started`
+
+Al revisar el error, entendí que el pipeline estaba aplicando una protección que ya habíamos configurado en trabajos anteriores: **solo permite desplegar a producción un commit que siga siendo el último de `main`**.
+
+Como el merge del PR #63 había generado un commit posterior, el workflow #89 quedó desactualizado y el pipeline bloqueó su despliegue.
+
+No fue necesario modificar el código ni corregir el pipeline, porque la protección estaba funcionando correctamente. Además, confirmé que el commit del PR #63 incluía los cambios anteriores de `main`, por lo que no era necesario desplegar primero el #89.
+
+Finalmente, aprobé el despliegue del **workflow #102**, correspondiente al PR #63, que completó correctamente los builds, QA, integración, E2E y el despliegue a PROD.
+
+Esta experiencia me permitió comprobar que las protecciones del pipeline no solamente detectan errores en el código, sino que también evitan desplegar versiones anteriores por equivocación.
