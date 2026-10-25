@@ -27,7 +27,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "latest",
     "@types/pg": "^8.21.0",
-    "@vitest/coverage-v8": "^5.0.3",
+    "@vitest/coverage-v8": "^5.0.5",
     "tsx": "latest",
     "typescript": "latest",
     "vitest": "^5.0.3"
