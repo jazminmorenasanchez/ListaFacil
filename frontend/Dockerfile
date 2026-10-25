@@ -7,7 +7,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+ARG VITE_SENTRY_DSN=""
+RUN VITE_SENTRY_DSN="$VITE_SENTRY_DSN" npm run build
 
 
 # ---- Etapa 2: tests con coverage ----

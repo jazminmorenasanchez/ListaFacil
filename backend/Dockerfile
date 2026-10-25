@@ -55,4 +55,4 @@ COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/app.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node --enable-source-maps dist/app.js"]
