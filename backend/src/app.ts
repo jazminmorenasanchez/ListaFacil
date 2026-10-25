@@ -1,3 +1,4 @@
+import './instrument'
 import express from 'express'
 import { authRouter } from './routes/auth.routes'
 import { householdRouter } from './routes/household.routes'
@@ -38,7 +39,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
     return
   }
 
-  console.error('Error inesperado', error)
+  console.error('Error inesperado del servidor')
   response.status(500).json({ message: 'Error interno del servidor' })
 })
 
