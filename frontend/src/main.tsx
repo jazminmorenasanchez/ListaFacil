@@ -4,7 +4,6 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import App from './App'
-import { runControlledSentryError } from './sentry-controlled-error'
 
 createRoot(document.getElementById('root')!, {
   onUncaughtError: Sentry.reactErrorHandler(),
@@ -15,5 +14,3 @@ createRoot(document.getElementById('root')!, {
     <App />
   </StrictMode>,
 )
-
-runControlledSentryError()
