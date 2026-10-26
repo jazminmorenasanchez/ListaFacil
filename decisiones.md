@@ -6,12 +6,16 @@
 - [TP2 - Contenedores: la app del semestre](#tp2--contenedores-la-app-del-semestre)
 - [TP3 - Planificación y trazabilidad](#tp3--planificación-y-trazabilidad)
 - [TP4 - CI: Pipelines as Code](#tp4---ci-pipelines-as-code)
-- [TP5 - Tests y cobertura como requisito de merge](#tp5---tests-y-cobertura-como-requisito-de-merge)
-- [TP6 — Continuous Delivery](#tp6--continuous-delivery)
-- [TP7 — CI/CD con imágenes y pruebas automatizadas](#tp7--cicd-con-imágenes-y-pruebas-automatizadas)
-- [TP8 — Infraestructura como Código](#tp8--infraestructura-como-código)
+- [TP5 - Calidad automatizada: tests y cobertura](#tp5---calidad-automatizada-tests-y-cobertura)
+- [TP6 - Continuous Delivery](#tp6--continuous-delivery)
+- [TP7 - CI/CD con imágenes y pruebas automatizadas](#tp7--cicd-con-imágenes-y-pruebas-automatizadas)
+- [TP8 - Infraestructura como Código](#tp8--infraestructura-como-código)
 - [TP9 - devsecops observabilidad](#tp9)
 
+## Enlaces importantes para la defensa
+
+- [TP6 - Paquetes, workflows y entornos](#enlaces-de-este-tp--tp6)
+- [TP7 - Paquetes, pruebas y entornos](#enlaces-del-tp7)
 
 ## TP1 - Git colaborativo
 
