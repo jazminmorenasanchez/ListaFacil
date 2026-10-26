@@ -10,6 +10,7 @@
 - [TP6 — Continuous Delivery](#tp6--continuous-delivery)
 - [TP7 — CI/CD con imágenes y pruebas automatizadas](#tp7--cicd-con-imágenes-y-pruebas-automatizadas)
 - [TP8 — Infraestructura como Código](#tp8--infraestructura-como-código)
+- [TP9 - devsecops observabilidad](#tp9)
 
 
 ## TP1 - Git colaborativo
@@ -805,7 +806,40 @@ Al ejecutar el primer `terraform apply`, recibí un error porque el provider de 
 
 Utilicé **ChatGPT y Codex** como herramientas de apoyo para interpretar la consigna, adaptar la configuración de Terraform a ListaFácil y generar los archivos de infraestructura. Revisé los cambios propuestos mediante el diff de Git, ejecuté personalmente los comandos de Terraform y comprobé el funcionamiento del entorno de preproducción. También verifiqué el rechazo del plan destructivo durante el experimento con `prevent_destroy`. No incorporé las propuestas de la IA sin revisarlas: las decisiones y verificaciones finales quedaron bajo mi responsabilidad.
 
-# TP9 
+# TP9
+
+## Decisiones y resultados
+
+### Actualización de dependencias con Dependabot
+
+Para analizar una actualización automática, elegí el PR [#63](https://github.com/jazminmorenasanchez/ListaFacil/pull/63), que actualizaba Express de `5.2.1` a `5.3.0` en el backend de ListaFácil.
+
+Decidí integrarlo después de revisar las notas de versión, los cambios de comportamiento y los resultados del CI. Además, comprobé que incluía actualizaciones de seguridad en dependencias transitivas, como `proxy-addr` de `2.0.7` a `2.0.8` y `qs`.
+
+Como los cambios eran compatibles con el uso actual de Express en mi aplicación y los checks estaban verdes, hice merge del PR. Posteriormente, el workflow #102 completó correctamente el despliegue a producción.
+
+### Monitoreo y observabilidad
+
+Configuré UptimeRobot para comprobar periódicamente el endpoint `/health` de ListaFácil en producción. Realicé una caída controlada y confirmé que recibí las notificaciones de caída y recuperación.
+
+**Tiempo hasta recibir el aviso de caída:** Aproximadamente entre 5 y 6 minutos.
+
+Después pausé el monitor para evitar que las consultas periódicas mantuvieran activo el servicio gratuito de Render innecesariamente.
+
+También integré Sentry en el backend y frontend para observar errores y tiempos de respuesta reales.
+
+Al utilizar ListaFácil en producción, identifiqué que:
+
+- **Operación más utilizada:** `GET /api/catalog`, con 9 solicitudes.
+- **Operación más lenta según P95:** `POST /api/auth/login`, con 1,59 segundos sobre 3 solicitudes.
+
+Para comprobar la captura de errores, realicé una prueba controlada en QA. Sentry registró el error `LISTAFACIL-FRONTEND-1` e identificó el archivo `src/sentry-controlled-error.ts`, línea 16. Después eliminé el código temporal y desplegué la versión limpia.
+
+[Enlace al error de Sentry](https://universidad-catolica-de-cor-0x.sentry.io/issues/7812209194/?project=4512300521095168&query=is%3Aunresolved&referrer=issue-stream)
+
+
+A partir de la medición del inicio de sesión, creé la historia «Investigar la latencia del inicio de sesión en producción» en el tablero del TP3, con criterios de aceptación verificables.
+
 ## Problemas encontrados y soluciones
 
 **1. Problema al actualizar un PR de Dependabot**
@@ -849,3 +883,30 @@ No fue necesario modificar el código ni corregir el pipeline, porque la protecc
 Finalmente, aprobé el despliegue del **workflow #102**, correspondiente al PR #63, que completó correctamente los builds, QA, integración, E2E y el despliegue a PROD.
 
 Esta experiencia me permitió comprobar que las protecciones del pipeline no solamente detectan errores en el código, sino que también evitan desplegar versiones anteriores por equivocación.
+
+### 3. Análisis de vulnerabilidades detectadas por CodeQL
+
+Al activar CodeQL en el repositorio de ListaFácil, GitHub realizó un análisis estático del código y detectó **15 alertas de seguridad de severidad alta**. Al revisarlas, observé que prácticamente todas señalaban el mismo tipo de problema: **`Missing rate limiting`**, relacionado con la ausencia de límites en la cantidad de solicitudes que pueden realizarse a determinados endpoints del backend.
+
+Este problema es importante porque, aunque las rutas requieran autenticación, un usuario podría realizar una cantidad excesiva de solicitudes en poco tiempo y consumir recursos del servidor o de la base de datos, afectando el rendimiento y la disponibilidad de la aplicación.
+
+Como parte del punto 3.3, decidí investigar una de estas alertas para comprender su causa y evaluar cómo resolverla. Con ayuda de Codex, analicé la implementación del backend y comprobé que no contaba con un mecanismo general de *rate limiting*.
+
+Sin embargo, al estudiar las posibles soluciones, encontré una dificultad adicional: ListaFácil utiliza distintos servicios y proxies entre el navegador y el backend. Para aplicar límites correctamente, necesitaba determinar cómo identificar de forma confiable al cliente que realiza cada solicitud, evitando tanto bloquear usuarios legítimos como permitir que alguien eluda la protección falsificando encabezados HTTP.
+
+Intenté comprobar el comportamiento de estos proxies mediante un mecanismo de diagnóstico temporal, restringido al entorno de QA. No obstante, la prueba no respondió como esperaba y no logré obtener la información necesaria para validar una configuración segura.
+
+Después de dedicar varias horas a investigar el problema, me di cuenta de que estaba destinando demasiado tiempo a una implementación que requería un análisis más profundo, especialmente porque quería comprobarla correctamente en QA antes de considerar cualquier despliegue a producción.
+
+Por ese motivo, **decidí no implementar una solución apresurada ni dar la alerta por resuelta**. Preferí comprender el riesgo, identificar las dificultades técnicas y dejar su resolución pendiente para después de las defensas, cuando pueda dedicarle el tiempo necesario para implementarla y probarla con mayor tranquilidad.
+
+Considero que es una vulnerabilidad importante que debo resolver, pero también que una medida de seguridad mal configurada puede introducir nuevos problemas. Esta experiencia me permitió entender que detectar una vulnerabilidad es solamente el primer paso: también es necesario evaluar cuidadosamente cómo corregirla sin afectar el funcionamiento de la aplicación.
+
+## Declaración de uso de IA
+Durante el desarrollo de los trabajos prácticos de esta segunda defensa utilicé ChatGPT como herramienta de acompañamiento y apoyo para organizar las actividades, interpretar las consignas, comprender conceptos técnicos, analizar problemas y evaluar posibles soluciones.
+
+También utilicé Codex como asistente para implementar y verificar cambios en el código de ListaFácil. Sin embargo, mantuve el control del repositorio: no delegué en Codex la realización de commits, pushes, merges ni despliegues. Estas acciones las realicé personalmente, después de revisar los cambios y los resultados de las verificaciones.
+
+A lo largo de los trabajos prácticos intenté comprender el funcionamiento de cada herramienta y el motivo de cada implementación, en lugar de limitarme a ejecutar instrucciones. Cuando surgieron problemas, utilicé la IA para investigar alternativas, pero procuré evaluar sus propuestas y tomar las decisiones técnicas con criterio propio.
+
+De esta manera, la IA funcionó como una herramienta de apoyo durante el proceso, mientras que la supervisión, las decisiones finales y la responsabilidad sobre el trabajo realizado permanecieron a mi cargo.
